@@ -3,6 +3,7 @@ package com.aashir.ecommerce.service;
 import com.aashir.ecommerce.dto.CreateProductRequest;
 import com.aashir.ecommerce.dto.CreateProductResponse;
 import com.aashir.ecommerce.entity.Product;
+import com.aashir.ecommerce.exception.ProductNotFoundException;
 import com.aashir.ecommerce.repository.ProductRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -67,5 +68,28 @@ public class ProductService {
         System.out.println(responsesAllProduct);
         return responsesAllProduct;
 
+    }
+
+    public CreateProductResponse getProductById(Long id){
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ProductNotFoundException("Product not found with Id: "+id));
+
+        return mapToResponse(product);
+    }
+
+    private CreateProductResponse mapToResponse(Product product){
+        CreateProductResponse response = new CreateProductResponse();
+
+        response.setId(product.getId());
+        response.setName(product.getProductName());
+        response.setPrice(product.getPrice());
+        response.setCategory(product.getCategory());
+        response.setDescription(product.getDescription());
+        response.setStockQuantity(product.getStockQuantity());
+        response.setStatus(product.getStatus());
+        response.setCreatedAt(product.getCreatedAt());
+        response.setUpdatedAt(product.getUpdatedAt());
+
+        return response;
     }
 }

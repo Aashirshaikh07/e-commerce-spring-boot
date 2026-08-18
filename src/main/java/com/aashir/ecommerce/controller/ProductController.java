@@ -2,6 +2,7 @@ package com.aashir.ecommerce.controller;
 
 import com.aashir.ecommerce.dto.CreateProductRequest;
 import com.aashir.ecommerce.dto.CreateProductResponse;
+import com.aashir.ecommerce.entity.Product;
 import com.aashir.ecommerce.service.ProductService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -34,6 +35,12 @@ public class ProductController {
         CreateProductResponse product = productService.createProduct(request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(product);
+    }
+
+    @GetMapping("/products/{id}")
+    public ResponseEntity<CreateProductResponse> getProductById(@PathVariable Long id){
+        CreateProductResponse product = productService.getProductById(id);
+        return ResponseEntity.ok(product);
     }
 
 
