@@ -4,6 +4,7 @@ import com.aashir.ecommerce.dto.CreateProductRequest;
 import com.aashir.ecommerce.dto.CreateProductResponse;
 import com.aashir.ecommerce.dto.UpdateProductRequest;
 import com.aashir.ecommerce.entity.Product;
+import com.aashir.ecommerce.entity.ProductStatus;
 import com.aashir.ecommerce.exception.ProductNotFoundException;
 import com.aashir.ecommerce.repository.ProductRepository;
 import org.springframework.stereotype.Service;
@@ -117,6 +118,15 @@ public class ProductService {
 
        Product updatedProducts =  productRepository.save(product);
         return mapToResponse(updatedProducts);
+    }
+
+    public CreateProductResponse deleteProductById(Long id){
+        Product product = productRepository.findById(id)
+                .orElseThrow(()->new ProductNotFoundException("Product not found with id "+id));
+
+        product.setStatus(ProductStatus.INACTIVE);
+       Product delete = productRepository.save(product);
+        return mapToResponse(delete);
     }
 
 }
