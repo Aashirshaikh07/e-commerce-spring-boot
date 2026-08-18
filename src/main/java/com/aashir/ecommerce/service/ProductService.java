@@ -8,6 +8,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Service
 public class ProductService {
 
@@ -40,6 +43,29 @@ public class ProductService {
         createProductResponse.setCreatedAt(savedProduct.getCreatedAt());
         createProductResponse.setUpdatedAt(savedProduct.getUpdatedAt());
         return createProductResponse;
+
+    }
+
+    public List<CreateProductResponse> getProductsAll(){
+        List<Product> products = productRepository.findAll();
+
+        List<CreateProductResponse> responsesAllProduct = new ArrayList<>();
+
+        for (Product product : products) {
+            CreateProductResponse createProductResponse = new CreateProductResponse();
+            createProductResponse.setId(product.getId());
+            createProductResponse.setName(product.getProductName());
+            createProductResponse.setPrice(product.getPrice());
+            createProductResponse.setCategory(product.getCategory());
+            createProductResponse.setDescription(product.getDescription());
+            createProductResponse.setStockQuantity(product.getStockQuantity());
+            createProductResponse.setStatus(product.getStatus());
+            createProductResponse.setCreatedAt(product.getCreatedAt());
+            createProductResponse.setUpdatedAt(product.getUpdatedAt());
+            responsesAllProduct.add(createProductResponse);
+        }
+        System.out.println(responsesAllProduct);
+        return responsesAllProduct;
 
     }
 }
