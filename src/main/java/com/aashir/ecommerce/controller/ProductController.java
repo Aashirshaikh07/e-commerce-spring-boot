@@ -2,6 +2,7 @@ package com.aashir.ecommerce.controller;
 
 import com.aashir.ecommerce.dto.CreateProductRequest;
 import com.aashir.ecommerce.dto.CreateProductResponse;
+import com.aashir.ecommerce.dto.UpdateProductRequest;
 import com.aashir.ecommerce.entity.Product;
 import com.aashir.ecommerce.service.ProductService;
 import jakarta.validation.Valid;
@@ -41,6 +42,13 @@ public class ProductController {
     public ResponseEntity<CreateProductResponse> getProductById(@PathVariable Long id){
         CreateProductResponse product = productService.getProductById(id);
         return ResponseEntity.ok(product);
+    }
+
+    @PatchMapping("/products/{id}")
+    public ResponseEntity<CreateProductResponse> updateProduct(@PathVariable Long id, @Valid @RequestBody UpdateProductRequest request){
+        CreateProductResponse updatedProduct = productService.updateProductById(id, request);
+
+        return ResponseEntity.ok(updatedProduct);
     }
 
 

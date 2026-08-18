@@ -2,11 +2,10 @@ package com.aashir.ecommerce.service;
 
 import com.aashir.ecommerce.dto.CreateProductRequest;
 import com.aashir.ecommerce.dto.CreateProductResponse;
+import com.aashir.ecommerce.dto.UpdateProductRequest;
 import com.aashir.ecommerce.entity.Product;
 import com.aashir.ecommerce.exception.ProductNotFoundException;
 import com.aashir.ecommerce.repository.ProductRepository;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -72,7 +71,7 @@ public class ProductService {
 
     public CreateProductResponse getProductById(Long id){
         Product product = productRepository.findById(id)
-                .orElseThrow(() -> new ProductNotFoundException("Product not found with Id: "+id));
+                .orElseThrow(()->new ProductNotFoundException("Product not found with id "+id));
 
         return mapToResponse(product);
     }
@@ -92,4 +91,32 @@ public class ProductService {
 
         return response;
     }
+
+    //Updating products
+
+    public CreateProductResponse  updateProductById(Long id,UpdateProductRequest request){
+
+        Product product = productRepository.findById(id)
+                .orElseThrow(()->new ProductNotFoundException("Product not found with id "+id));
+
+        if(request.getName()!=null){
+            product.setProductName(request.getName());
+        }
+        if(request.getDescription()!=null){
+            product.setDescription(request.getDescription());
+        }
+        if(request.getCategory()!=null){
+            product.setCategory(request.getCategory());
+        }
+        if(request.getPrice()!=null){
+            product.setPrice(request.getPrice());
+        }
+        if (request.getStockQuantity() != null) {
+            product.setStockQuantity(request.getStockQuantity());
+        }
+
+       Product updatedProducts =  productRepository.save(product);
+        return mapToResponse(updatedProducts);
+    }
+
 }
