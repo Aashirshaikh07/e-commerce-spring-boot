@@ -3,14 +3,12 @@ package com.aashir.ecommerce.controller;
 import com.aashir.ecommerce.dto.CreateProductRequest;
 import com.aashir.ecommerce.dto.CreateProductResponse;
 import com.aashir.ecommerce.dto.UpdateProductRequest;
-import com.aashir.ecommerce.entity.Product;
 import com.aashir.ecommerce.service.ProductService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @RestController

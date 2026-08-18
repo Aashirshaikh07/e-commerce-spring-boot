@@ -65,7 +65,6 @@ public class ProductService {
             createProductResponse.setUpdatedAt(product.getUpdatedAt());
             responsesAllProduct.add(createProductResponse);
         }
-        System.out.println(responsesAllProduct);
         return responsesAllProduct;
 
     }
