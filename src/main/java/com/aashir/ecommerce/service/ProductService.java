@@ -71,7 +71,7 @@ public class ProductService {
 
     public CreateProductResponse getProductById(Long id){
         Product product = productRepository.findById(id)
-                .orElseThrow(()->new ProductNotFoundException("Product not found with id "+id));
+                .orElseThrow(()->new ProductNotFoundException(id));
 
         return mapToResponse(product);
     }
@@ -97,7 +97,9 @@ public class ProductService {
     public CreateProductResponse  updateProductById(Long id,UpdateProductRequest request){
 
         Product product = productRepository.findById(id)
-                .orElseThrow(()->new ProductNotFoundException("Product not found with id "+id));
+                .orElseThrow(() ->
+                        new ProductNotFoundException(id)
+                );
 
         if(request.getName()!=null){
             product.setProductName(request.getName());
@@ -121,7 +123,7 @@ public class ProductService {
 
     public CreateProductResponse deleteProductById(Long id){
         Product product = productRepository.findById(id)
-                .orElseThrow(()->new ProductNotFoundException("Product not found with id "+id));
+                .orElseThrow(()->new ProductNotFoundException(id));
 
         product.setStatus(ProductStatus.INACTIVE);
        Product delete = productRepository.save(product);
