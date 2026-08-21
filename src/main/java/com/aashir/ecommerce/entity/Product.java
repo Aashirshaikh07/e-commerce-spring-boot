@@ -18,9 +18,6 @@ public class Product {
     @Column(nullable = false,precision = 10,scale = 2)
     private BigDecimal price;
 
-    @Column(name = "stock_quantity", nullable = false)
-    private Integer stockQuantity;
-
     @Column(length = 2000)
     private String description;
 
@@ -80,13 +77,6 @@ public class Product {
         this.price = price;
     }
 
-    public Integer getStockQuantity() {
-        return stockQuantity;
-    }
-
-    public void setStockQuantity(Integer stockQuantity) {
-        this.stockQuantity = stockQuantity;
-    }
 
     public String getDescription() {
         return description;

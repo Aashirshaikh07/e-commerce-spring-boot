@@ -28,16 +28,16 @@ public class UpdateProductRequest {
 //    @Size(max = 50,message = "Product description must not larger than 50 characters")
 //    private ProductStatus status;
 
-    @Min(value = 0,message = "Stock quantity cannot be negative")
-    private Integer stockQuantity;
+//    @Min(value = 0,message = "Stock quantity cannot be negative")
+//    private Integer stockQuantity;
 
-    public Integer getStockQuantity() {
-        return stockQuantity;
-    }
-
-    public void setStockQuantity(Integer stockQuantity) {
-        this.stockQuantity = stockQuantity;
-    }
+//    public Integer getStockQuantity() {
+//        return stockQuantity;
+//    }
+//
+//    public void setStockQuantity(Integer stockQuantity) {
+//        this.stockQuantity = stockQuantity;
+//    }
 
     public String getName() {
         return name;
