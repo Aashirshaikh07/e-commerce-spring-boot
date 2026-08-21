@@ -10,7 +10,6 @@ public class CreateProductResponse {
  private String name;
  private String description;
  private BigDecimal price;
- private Integer stockQuantity;
  private String category;
  private ProductStatus status;
  private LocalDateTime createdAt;
@@ -46,14 +45,6 @@ public class CreateProductResponse {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
-    }
-
-    public Integer getStockQuantity() {
-        return stockQuantity;
-    }
-
-    public void setStockQuantity(Integer stockQuantity) {
-        this.stockQuantity = stockQuantity;
     }
 
     public String getCategory() {

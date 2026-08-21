@@ -3,6 +3,7 @@ package com.aashir.ecommerce.service;
 import com.aashir.ecommerce.dto.*;
 import com.aashir.ecommerce.entity.*;
 import com.aashir.ecommerce.exception.*;
+import com.aashir.ecommerce.repository.InventoryRepository;
 import com.aashir.ecommerce.repository.OrderItemRepository;
 import com.aashir.ecommerce.repository.OrderRepository;
 import com.aashir.ecommerce.repository.ProductRepository;
@@ -18,11 +19,15 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final OrderItemRepository orderItemRepository;
+    private final InventoryRepository inventoryRepository;
+    private final InventoryService inventoryService;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository) {
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.orderItemRepository = orderItemRepository;
+        this.inventoryRepository = inventoryRepository;
+        this.inventoryService = inventoryService;
     }
 
     @Transactional
@@ -40,13 +45,18 @@ public class OrderService {
 
             if(product.getStatus() == ProductStatus.INACTIVE){
                 throw new ProductIsNotActive(product.getId());
-            } else if (product.getStockQuantity() == 0 || product.getStockQuantity() <itemRequest.getQuantity()) {
+            }
+            Inventory inventory = inventoryRepository.findByProductId(product.getId())
+                    .orElseThrow(()-> new InventoryNotFoundException(product.getId()));
+
+            if(inventory.getQuantity() < itemRequest.getQuantity()){
                 throw new InsufficientStockException(product.getId());
             }
-
-            product.setStockQuantity(
-                    product.getStockQuantity() - itemRequest.getQuantity()
+            inventory.setQuantity(
+                    inventory.getQuantity() - itemRequest.getQuantity()
             );
+
+            inventoryRepository.save(inventory);
 
             BigDecimal price = product.getPrice();
 
@@ -119,6 +129,19 @@ public class OrderService {
             );
         }
         order.setStatus(requestedStatus);
+        OrderStatus orderStatus =order.getStatus();
+        if(orderStatus.equals(OrderStatus.CANCELLED)){
+            List<OrderItem> orderItems = orderItemRepository.findByOrderId(order_id);
+            int count = 0;
+            for (OrderItem orderItem : orderItems) {
+                Long productId = orderItem.getProduct().getId();
+                Integer quantity = orderItem.getQuantity();
+                inventoryService.addStock(productId, new UpdateStockRequest(quantity));
+                count = count + 1;
+            }
+
+        }
+
         orderRepository.save(order);
         ResponseUpdatedOrder responseUpdatedOrder = new ResponseUpdatedOrder();
         responseUpdatedOrder.setId(order.getId());
