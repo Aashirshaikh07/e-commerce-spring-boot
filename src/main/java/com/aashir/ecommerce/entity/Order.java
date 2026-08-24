@@ -19,18 +19,30 @@ public class Order {
     @Column(nullable = false,precision = 10,scale = 2)
     private BigDecimal totalAmount;
 
+    @JoinColumn(nullable = false,name = "user_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    private User user;
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private OrderStatus status;
 
     @Column(nullable = false)
-
     @OneToMany(
             mappedBy = "order",
             cascade = CascadeType.ALL,
             orphanRemoval = true
     )
     private List<OrderItem> items = new ArrayList<>();
+
 
     public Order(){
 

@@ -3,10 +3,8 @@ package com.aashir.ecommerce.service;
 import com.aashir.ecommerce.dto.*;
 import com.aashir.ecommerce.entity.*;
 import com.aashir.ecommerce.exception.*;
-import com.aashir.ecommerce.repository.InventoryRepository;
-import com.aashir.ecommerce.repository.OrderItemRepository;
-import com.aashir.ecommerce.repository.OrderRepository;
-import com.aashir.ecommerce.repository.ProductRepository;
+import com.aashir.ecommerce.repository.*;
+import com.aashir.ecommerce.security.SecurityUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,21 +19,28 @@ public class OrderService {
     private final OrderItemRepository orderItemRepository;
     private final InventoryRepository inventoryRepository;
     private final InventoryService inventoryService;
+    private final UserRepository userRepository;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService) {
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.orderItemRepository = orderItemRepository;
         this.inventoryRepository = inventoryRepository;
         this.inventoryService = inventoryService;
+        this.userRepository = userRepository;
     }
 
     @Transactional
     public CreateOrderResponse createOrder(CreateOrderRequest createOrderRequest) {
+        String email = SecurityUtils.getCurrentUserEmail();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(()->new RuntimeException("User not found"));
+
         Order order = new Order();
 
         order.setOrderNumber("ORD-"+ UUID.randomUUID());
         order.setStatus(OrderStatus.PENDING);
+        order.setUser(user);
 
         BigDecimal totalAmount =  BigDecimal.ZERO;
 
@@ -110,7 +115,11 @@ public class OrderService {
 
     public CreateOrderResponse getOrderById(Long order_id){
 
-        Order order = orderRepository.findOrderWithItems(order_id)
+        String email = SecurityUtils.getCurrentUserEmail();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(()->new RuntimeException("User not found"));
+
+        Order order = orderRepository.findByIdAndUserId(order_id,user.getId())
                 .orElseThrow(()->  new RuntimeException("Order Not Found"));
 
 
@@ -132,12 +141,10 @@ public class OrderService {
         OrderStatus orderStatus =order.getStatus();
         if(orderStatus.equals(OrderStatus.CANCELLED)){
             List<OrderItem> orderItems = orderItemRepository.findByOrderId(order_id);
-            int count = 0;
             for (OrderItem orderItem : orderItems) {
                 Long productId = orderItem.getProduct().getId();
                 Integer quantity = orderItem.getQuantity();
                 inventoryService.addStock(productId, new UpdateStockRequest(quantity));
-                count = count + 1;
             }
 
         }
@@ -150,5 +157,13 @@ public class OrderService {
         responseUpdatedOrder.setTotalAmount(order.getTotalAmount());
         return responseUpdatedOrder;
     }
+
+    //For Next all orders fetech
+//    String email = SecurityUtils.getCurrentUserEmail();
+//
+//    User user = userRepository.findUserWithOrdersByEmail(email)
+//            .orElseThrow(() -> new UserNotFoundException(email));
+//
+//    List<Order> orders = user.getOrders();
 
 }
