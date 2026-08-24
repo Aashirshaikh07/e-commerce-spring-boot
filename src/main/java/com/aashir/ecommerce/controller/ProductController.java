@@ -4,15 +4,23 @@ import com.aashir.ecommerce.dto.CreateProductRequest;
 import com.aashir.ecommerce.dto.CreateProductResponse;
 import com.aashir.ecommerce.dto.UpdateProductRequest;
 import com.aashir.ecommerce.service.ProductService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1")
+@Tag(
+        name = "Products Management",
+        description = "APIs for managing Products Management"
+)
 public class ProductController {
 
     private ProductService productService;
@@ -27,6 +35,9 @@ public class ProductController {
         return  new ResponseEntity<>(products, HttpStatus.OK);
     }
 
+    @Operation(summary = "Create product")
+    @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name= "bearerAuth")
     @PostMapping("/products")
     public ResponseEntity<CreateProductResponse> createProduct(
             @Valid @RequestBody CreateProductRequest request
@@ -42,6 +53,9 @@ public class ProductController {
         return ResponseEntity.ok(product);
     }
 
+    @Operation(summary = "Update product")
+    @SecurityRequirement(name= "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/products/{id}")
     public ResponseEntity<CreateProductResponse> updateProduct(@PathVariable Long id, @Valid @RequestBody UpdateProductRequest request){
         CreateProductResponse updatedProduct = productService.updateProductById(id, request);
@@ -49,6 +63,10 @@ public class ProductController {
         return ResponseEntity.ok(updatedProduct);
     }
 
+
+    @Operation(summary = "Delete product")
+    @SecurityRequirement(name= "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/products/{id}")
     public ResponseEntity<CreateProductResponse> deleteProductById(@PathVariable Long id){
        CreateProductResponse  response= productService.deleteProductById(id);
