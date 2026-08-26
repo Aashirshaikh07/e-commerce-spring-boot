@@ -49,7 +49,7 @@ public class ProductServiceMockitoTest {
         savedProduct.setPrice(new BigDecimal("50000"));
         savedProduct.setDescription("Gaming Laptop");
         savedProduct.setCategory("Electronics");
-        savedProduct.setStockQuantity(10);
+        //savedProduct.setStockQuantity(10);
         savedProduct.setStatus(ProductStatus.ACTIVE);
 
         when(productRepository.save(any(Product.class))).thenReturn(savedProduct);
@@ -77,7 +77,7 @@ public class ProductServiceMockitoTest {
         savedProduct.setPrice(new BigDecimal("50000"));
         savedProduct.setDescription("Gaming Laptop");
         savedProduct.setCategory("Electronics");
-        savedProduct.setStockQuantity(10);
+       // savedProduct.setStockQuantity(10);
         savedProduct.setStatus(ProductStatus.ACTIVE);
 
         when(productRepository.save(any(Product.class)))
@@ -98,7 +98,7 @@ public class ProductServiceMockitoTest {
         assertEquals(new BigDecimal("50000"), capturedProduct.getPrice());
         assertEquals("Gaming Laptop", capturedProduct.getDescription());
         assertEquals("Electronics", capturedProduct.getCategory());
-        assertEquals(10, capturedProduct.getStockQuantity());
+       // assertEquals(10, capturedProduct.getStockQuantity());
 
     }
     @Test
@@ -123,14 +123,14 @@ public class ProductServiceMockitoTest {
         product1.setProductName("Laptop");
         product1.setPrice(new BigDecimal("50000"));
         product1.setCategory("Electronics");
-        product1.setStockQuantity(10);
+       // product1.setStockQuantity(10);
 
         Product product2 = new Product();
         product2.setId(2L);
         product2.setProductName("Phone");
         product2.setPrice(new BigDecimal("30000"));
         product2.setCategory("Electronics");
-        product2.setStockQuantity(20);
+      //  product2.setStockQuantity(20);
 
         when(productRepository.findAll())
                 .thenReturn(List.of(product1,product2));
@@ -154,7 +154,6 @@ public class ProductServiceMockitoTest {
         existingProduct.setProductName("Laptop");
         existingProduct.setPrice(new BigDecimal("50000"));
         existingProduct.setCategory("Electronics");
-        existingProduct.setStockQuantity(10);
         existingProduct.setDescription("Normal Laptop");
 
         UpdateProductRequest request=new UpdateProductRequest();
@@ -173,7 +172,6 @@ public class ProductServiceMockitoTest {
         assertEquals("New Laptop",response.getName());
         assertEquals("Gaming Laptop",response.getDescription());
         assertEquals("Electronics",response.getCategory());
-        assertEquals(10,response.getStockQuantity());
 
         verify(productRepository,times(1)).findById(1L);
         verify(productRepository).save(existingProduct);
@@ -187,7 +185,7 @@ public class ProductServiceMockitoTest {
         product.setPrice(new BigDecimal("50000"));
         product.setDescription("Gaming Laptop");
         product.setCategory("Electronics");
-        product.setStockQuantity(10);
+
 
         when(productRepository.findById(1L))
                 .thenReturn(Optional.of(product));
@@ -196,7 +194,6 @@ public class ProductServiceMockitoTest {
         assertEquals("Laptop", response.getName());
         assertEquals(new BigDecimal("50000"), response.getPrice());
         assertEquals("Electronics", response.getCategory());
-        assertEquals(10, response.getStockQuantity());
 
         //This verifys method check whether service interact with it?
         verify(productRepository).findById(1L);

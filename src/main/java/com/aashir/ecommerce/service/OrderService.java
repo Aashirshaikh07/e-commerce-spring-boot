@@ -2,9 +2,13 @@ package com.aashir.ecommerce.service;
 
 import com.aashir.ecommerce.dto.*;
 import com.aashir.ecommerce.entity.*;
+import com.aashir.ecommerce.event.OrderCancelledEvent;
+import com.aashir.ecommerce.event.OrderCreatedEvent;
+import com.aashir.ecommerce.event.OrderItemEvent;
 import com.aashir.ecommerce.exception.*;
 import com.aashir.ecommerce.repository.*;
 import com.aashir.ecommerce.security.SecurityUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,14 +24,16 @@ public class OrderService {
     private final InventoryRepository inventoryRepository;
     private final InventoryService inventoryService;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository) {
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.orderItemRepository = orderItemRepository;
         this.inventoryRepository = inventoryRepository;
         this.inventoryService = inventoryService;
         this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -84,6 +90,25 @@ public class OrderService {
         order.setTotalAmount(totalAmount);
          Order savedOrder = orderRepository.save(order);
 
+         OrderCreatedEvent event = new OrderCreatedEvent(
+                 user.getName(),
+                 user.getEmail(),
+                 savedOrder.getOrderNumber(),
+                 savedOrder.getStatus(),
+                 savedOrder.getItems()
+                         .stream()
+                         .map(item->new OrderItemEvent(
+                                 item.getProduct().getProductName(),
+                                 item.getQuantity(),
+                                 item.getPrice(),
+                                 item.getSubtotal()
+                         ))
+                         .toList(),
+                 savedOrder.getTotalAmount()
+         );
+
+         eventPublisher.publishEvent(event);
+
          return mapToResponse(savedOrder);
     }
 
@@ -126,6 +151,8 @@ public class OrderService {
        return mapToResponse(order);
     }
 
+
+    @Transactional
     public ResponseUpdatedOrder updateOrderStatus(Long order_id, OrderStatus requestedStatus){
         Order order = orderRepository.findById(order_id)
                 .orElseThrow(()-> new OrderNotFountException(order_id));
@@ -150,6 +177,26 @@ public class OrderService {
         }
 
         orderRepository.save(order);
+
+        if(orderStatus.equals(OrderStatus.CANCELLED)){
+            OrderCancelledEvent event = new  OrderCancelledEvent(
+                order.getUser().getName(),
+                    order.getUser().getEmail(),
+                    order.getOrderNumber(),
+                    order.getStatus(),
+                    order.getItems()
+                            .stream()
+                            .map(item->new OrderItemEvent(
+                                    item.getProduct().getProductName(),
+                                    item.getQuantity(),
+                                    item.getPrice(),
+                                    item.getSubtotal()
+                            ))
+                            .toList(),
+                    order.getTotalAmount()
+            );
+            eventPublisher.publishEvent(event);
+        }
         ResponseUpdatedOrder responseUpdatedOrder = new ResponseUpdatedOrder();
         responseUpdatedOrder.setId(order.getId());
         responseUpdatedOrder.setOrderNumber(order.getOrderNumber());
