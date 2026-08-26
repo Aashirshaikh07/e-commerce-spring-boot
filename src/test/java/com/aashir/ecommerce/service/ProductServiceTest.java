@@ -4,6 +4,7 @@ import com.aashir.ecommerce.dto.CreateProductRequest;
 import com.aashir.ecommerce.dto.CreateProductResponse;
 import com.aashir.ecommerce.entity.Product;
 import com.aashir.ecommerce.entity.ProductStatus;
+import com.aashir.ecommerce.repository.InventoryRepository;
 import com.aashir.ecommerce.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -22,15 +23,17 @@ public class ProductServiceTest {
         ProductRepository productRepository =
                 Mockito.mock(ProductRepository.class);
 
+        InventoryRepository inventoryRepository =
+                Mockito.mock(InventoryRepository.class);
         ProductService productService =
-                new ProductService(productRepository);
+                new ProductService(productRepository,inventoryRepository);
+
         Product product = new Product();
         product.setId(1L);
         product.setProductName("Laptop");
         product.setDescription("Gaming Laptop");
         product.setStatus(ProductStatus.ACTIVE);
         product.setPrice(new BigDecimal("120000.34"));
-        product.setStockQuantity(21);
         product.setCategory("Electronics");
 
         Mockito.when(productRepository.findById(1L))
@@ -52,9 +55,11 @@ public class ProductServiceTest {
     //Arrange
         ProductRepository productRepository =
                 Mockito.mock(ProductRepository.class);
+        InventoryRepository inventoryRepository =
+                Mockito.mock(InventoryRepository.class);
 
         ProductService productService =
-                new ProductService(productRepository);
+                new ProductService(productRepository,inventoryRepository);
 
         CreateProductRequest request = new CreateProductRequest();
 
@@ -71,7 +76,6 @@ public class ProductServiceTest {
         savedProduct.setPrice(new BigDecimal("50000.00"));
         savedProduct.setDescription("Gaming Laptop");
         savedProduct.setCategory("Electronics");
-        savedProduct.setStockQuantity(10);
         savedProduct.setStatus(ProductStatus.ACTIVE);
 
         Mockito.when(productRepository.save(Mockito.any(Product.class)))
@@ -86,7 +90,6 @@ public class ProductServiceTest {
         assertEquals(new BigDecimal("50000.00"), response.getPrice());
         assertEquals("Gaming Laptop", response.getDescription());
         assertEquals("Electronics", response.getCategory());
-        assertEquals(10, response.getStockQuantity());
         assertEquals(ProductStatus.ACTIVE, response.getStatus());
     }
 
@@ -94,8 +97,10 @@ public class ProductServiceTest {
     void deleteProductById_shouldSetStatusToInactive() {
         ProductRepository productRepository =
                 Mockito.mock(ProductRepository.class);
+        InventoryRepository inventoryRepository =
+                Mockito.mock(InventoryRepository.class);
         ProductService productService =
-                new ProductService(productRepository);
+                new ProductService(productRepository,inventoryRepository);
 
         Product product = new Product();
         product.setId(1L);
@@ -103,7 +108,6 @@ public class ProductServiceTest {
         product.setDescription("Gaming Laptop");
         product.setStatus(ProductStatus.ACTIVE);
         product.setPrice(new BigDecimal("120000.34"));
-        product.setStockQuantity(21);
         product.setCategory("Electronics");
 
         Mockito.when(productRepository.findById(1L))
