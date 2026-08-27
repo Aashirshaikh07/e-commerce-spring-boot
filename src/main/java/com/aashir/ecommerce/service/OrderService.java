@@ -166,43 +166,16 @@ public class OrderService {
         }
         order.setStatus(requestedStatus);
         OrderStatus orderStatus =order.getStatus();
-        if(orderStatus.equals(OrderStatus.CANCELLED)){
-            List<OrderItem> orderItems = orderItemRepository.findByOrderId(order_id);
-            for (OrderItem orderItem : orderItems) {
-                Long productId = orderItem.getProduct().getId();
-                Integer quantity = orderItem.getQuantity();
-                inventoryService.addStock(productId, new UpdateStockRequest(quantity));
-            }
-
+        if (requestedStatus == OrderStatus.CANCELLED) {
+            restoreInventory(order);
         }
 
         orderRepository.save(order);
 
-        if(orderStatus.equals(OrderStatus.CANCELLED)){
-            OrderCancelledEvent event = new  OrderCancelledEvent(
-                order.getUser().getName(),
-                    order.getUser().getEmail(),
-                    order.getOrderNumber(),
-                    order.getStatus(),
-                    order.getItems()
-                            .stream()
-                            .map(item->new OrderItemEvent(
-                                    item.getProduct().getProductName(),
-                                    item.getQuantity(),
-                                    item.getPrice(),
-                                    item.getSubtotal()
-                            ))
-                            .toList(),
-                    order.getTotalAmount()
-            );
-            eventPublisher.publishEvent(event);
-        }
-        ResponseUpdatedOrder responseUpdatedOrder = new ResponseUpdatedOrder();
-        responseUpdatedOrder.setId(order.getId());
-        responseUpdatedOrder.setOrderNumber(order.getOrderNumber());
-        responseUpdatedOrder.setStatus(order.getStatus());
-        responseUpdatedOrder.setTotalAmount(order.getTotalAmount());
-        return responseUpdatedOrder;
+       if (requestedStatus == OrderStatus.CANCELLED) {
+           publishOrderCancelledEvent(order);
+       }
+        return mapToUpdatedOrderResponse(order);
     }
 
     //For Next all orders fetech
@@ -212,5 +185,50 @@ public class OrderService {
 //            .orElseThrow(() -> new UserNotFoundException(email));
 //
 //    List<Order> orders = user.getOrders();
+
+
+
+   private void publishOrderCancelledEvent(Order order){
+
+        OrderCancelledEvent event = new  OrderCancelledEvent(
+                order.getUser().getName(),
+                order.getUser().getEmail(),
+                order.getOrderNumber(),
+                order.getStatus(),
+                order.getItems().stream()
+                        .map(item->new OrderItemEvent(
+                                item.getProduct().getProductName(),
+                                item.getQuantity(),
+                                item.getPrice(),
+                                item.getSubtotal()
+                        ))
+                        .toList(),
+                order.getTotalAmount()
+        );
+        eventPublisher.publishEvent(event);
+   }
+
+    private ResponseUpdatedOrder mapToUpdatedOrderResponse(Order order) {
+
+        ResponseUpdatedOrder response = new ResponseUpdatedOrder();
+
+        response.setId(order.getId());
+        response.setOrderNumber(order.getOrderNumber());
+        response.setStatus(order.getStatus());
+        response.setTotalAmount(order.getTotalAmount());
+
+        return response;
+    }
+
+    private void restoreInventory(Order order){
+        List<OrderItem> orderItems = orderItemRepository.findByOrderId(order.getId());
+
+        for (OrderItem orderItem : orderItems) {
+            Long productId = orderItem.getProduct().getId();
+            Integer quantity = orderItem.getQuantity();
+
+            inventoryService.addStock(productId, new UpdateStockRequest(quantity));
+        }
+    }
 
 }
