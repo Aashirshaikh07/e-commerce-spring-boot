@@ -3,6 +3,7 @@ package com.aashir.ecommerce.entity;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,9 +44,24 @@ public class Order {
     )
     private List<OrderItem> items = new ArrayList<>();
 
+    @Column(nullable = false,updatable = false)
+    private LocalDateTime createdAt;
+
+    public LocalDateTime getCreateAt() {
+        return createdAt;
+    }
+
+    public void setCreateAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
 
     public Order(){
 
+    }
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
     }
 
     public Long getId() {
