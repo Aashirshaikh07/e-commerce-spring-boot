@@ -54,6 +54,13 @@ public class SecurityConfig {
                                 "/api/v1/products",
                                 "/api/v1/products/{id}"
                         ).permitAll()
+                        .requestMatchers(
+                                "/actuator/health",
+                                "/actuator/info",
+                                "/actuator/metrics",
+                                "/actuator/metrics/**",
+                                "/actuator/prometheus"
+                        ).permitAll()
                         .anyRequest()
                         .authenticated()
                 )

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<configuration>
+
+    <appender name="FILE"
+              class="ch.qos.logback.core.rolling.RollingFileAppender">
+
+        <!-- Current log file -->
+        <file>logs/ecommerce.log</file>
+
+        <!-- Rolling configuration -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+
+            <!-- Archived log files -->
+            <fileNamePattern>
+                logs/ecommerce-%d{yyyy-MM-dd}.%i.log
+            </fileNamePattern>
+
+            <!-- Roll when file reaches 10 MB -->
+            <maxFileSize>10MB</maxFileSize>
+
+            <!-- Keep archived logs for 30 days -->
+            <maxHistory>30</maxHistory>
+
+            <!-- Maximum size of all archived logs -->
+            <totalSizeCap>1GB</totalSizeCap>
+
+        </rollingPolicy>
+
+        <!-- Log format -->
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>requestId</includeMdcKeyName>
+        </encoder>
+
+    </appender>
+
+    <!-- Framework logs -->
+    <logger name="org.springframework" level="WARN"/>
+    <logger name="org.hibernate" level="WARN"/>
+    <logger name="org.apache.tomcat" level="WARN"/>
+    <logger name="com.zaxxer.hikari" level="WARN"/>
+
+    <!-- Application logs go only to FILE -->
+    <root level="INFO">
+        <appender-ref ref="FILE"/>
+    </root>
+
+</configuration>
