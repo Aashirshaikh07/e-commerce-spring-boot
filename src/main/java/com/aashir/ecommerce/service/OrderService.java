@@ -7,9 +7,12 @@ import com.aashir.ecommerce.event.OrderCreatedEvent;
 import com.aashir.ecommerce.event.OrderItemEvent;
 import com.aashir.ecommerce.exception.*;
 import com.aashir.ecommerce.repository.*;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 import com.aashir.ecommerce.security.SecurityUtils;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -26,7 +29,12 @@ public class OrderService {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher) {
+    private static final Logger log =
+            LoggerFactory.getLogger(OrderService.class);
+
+    private final MeterRegistry meterRegistry;
+
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.orderItemRepository = orderItemRepository;
@@ -34,6 +42,7 @@ public class OrderService {
         this.inventoryService = inventoryService;
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
+        this.meterRegistry = meterRegistry;
     }
 
     @Transactional
@@ -42,6 +51,7 @@ public class OrderService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(()->new RuntimeException("User not found"));
 
+        log.info("Creating new order with email ={} and item={}",email,+createOrderRequest.getItems().size());
         Order order = new Order();
 
         order.setOrderNumber("ORD-"+ UUID.randomUUID());
@@ -109,6 +119,10 @@ public class OrderService {
 
          eventPublisher.publishEvent(event);
 
+        meterRegistry.counter("orders.created").increment();
+
+        log.info("Order created successfully: orderId={}", order.getId());
+
          return mapToResponse(savedOrder);
     }
 
@@ -157,8 +171,11 @@ public class OrderService {
         Order order = orderRepository.findById(order_id)
                 .orElseThrow(()-> new OrderNotFountException(order_id));
 
+        log.info("Updating orderStatus with orderId ={}",order.getId());
+
         OrderStatus currentStatus = order.getStatus();
         if (!currentStatus.canTransitionTo(requestedStatus)) {
+            log.info("Order Status Transition can't be updated with wrong wrong steps");
             throw new InvalidOrderStatusTransitionException(
                     currentStatus,
                     requestedStatus
@@ -168,6 +185,8 @@ public class OrderService {
         OrderStatus orderStatus =order.getStatus();
         if (requestedStatus == OrderStatus.CANCELLED) {
             restoreInventory(order);
+            log.info("cancelled orderId ={}",order.getId());
+            meterRegistry.counter("orders.cancelled").increment();
         }
 
         orderRepository.save(order);
@@ -228,6 +247,8 @@ public class OrderService {
             Integer quantity = orderItem.getQuantity();
 
             inventoryService.addStock(productId, new UpdateStockRequest(quantity));
+            log.info("Restore inventory successfully with inventoryProductName={} and productCount",orderItem.getProduct().getProductName(),orderItem.getQuantity());
+
         }
     }
 

@@ -25,6 +25,8 @@ public class AsyncConfig {
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("email-");
 
+        executor.setTaskDecorator(new MdcTaskDecorator());
+
         executor.initialize();
         return executor;
     }

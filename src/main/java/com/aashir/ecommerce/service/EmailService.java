@@ -32,6 +32,7 @@ public class EmailService {
                false
        );
         sendEmail(event.customerEmail(), subject, html);
+        log.info("Order confirmed email sent");
     }
 
     public void sendOrderCancelledEmail(OrderCancelledEvent event) {
