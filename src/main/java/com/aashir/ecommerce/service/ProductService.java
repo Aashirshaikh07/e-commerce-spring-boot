@@ -9,6 +9,7 @@ import com.aashir.ecommerce.entity.ProductStatus;
 import com.aashir.ecommerce.exception.ProductNotFoundException;
 import com.aashir.ecommerce.repository.InventoryRepository;
 import com.aashir.ecommerce.repository.ProductRepository;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -42,6 +43,7 @@ public class ProductService {
        return mapToResponse(savedProduct);
     }
 
+    @Cacheable(value = "products",key = "#id")
     public List<CreateProductResponse> getProductsAll(){
         List<Product> products = productRepository.findAll();
 
