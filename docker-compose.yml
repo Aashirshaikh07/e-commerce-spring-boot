@@ -16,8 +16,14 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7
+    container_name: redis-container
+    networks:
+      - ecommerce-network
+
   app:
-    image: ecommerce:1.0
+    image: ecommerce:redis-1.0
     container_name: ecommerce-container
     ports:
       - "8080:8080"
