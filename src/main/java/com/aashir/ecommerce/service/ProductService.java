@@ -1,5 +1,9 @@
 package com.aashir.ecommerce.service;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import com.aashir.ecommerce.dto.CreateProductRequest;
 import com.aashir.ecommerce.dto.CreateProductResponse;
 import com.aashir.ecommerce.dto.UpdateProductRequest;
@@ -24,6 +28,7 @@ public class ProductService {
         this.inventoryRepository = inventoryRepository;
     }
 
+    @CacheEvict(value = "products", key = "'all'")
     public CreateProductResponse createProduct(CreateProductRequest request) {
         Product product = new Product();
 
@@ -42,6 +47,7 @@ public class ProductService {
        return mapToResponse(savedProduct);
     }
 
+    @Cacheable(value = "products", key = "'all'")
     public List<CreateProductResponse> getProductsAll(){
         List<Product> products = productRepository.findAll();
 
@@ -62,7 +68,7 @@ public class ProductService {
         return responsesAllProduct;
 
     }
-
+    @Cacheable(value = "products", key = "#id")
     public CreateProductResponse getProductById(Long id){
         Product product = productRepository.findById(id)
                 .orElseThrow(()->new ProductNotFoundException(id));
@@ -87,6 +93,10 @@ public class ProductService {
 
     //Updating products
 
+    @Caching(
+            put = @CachePut(value = "products", key = "#id"),
+            evict = @CacheEvict(value = "products", key = "'all'")
+    )
     public CreateProductResponse  updateProductById(Long id,UpdateProductRequest request){
 
         Product product = productRepository.findById(id)
@@ -111,6 +121,10 @@ public class ProductService {
         return mapToResponse(updatedProducts);
     }
 
+    @Caching(
+            put = @CachePut(value = "products", key = "#id"),
+            evict = @CacheEvict(value = "products", key = "'all'")
+    )
     public CreateProductResponse deleteProductById(Long id){
         Product product = productRepository.findById(id)
                 .orElseThrow(()->new ProductNotFoundException(id));
