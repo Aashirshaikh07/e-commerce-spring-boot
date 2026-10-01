@@ -24,7 +24,7 @@ public class OrderScheduler {
     @Value("${order.expiration.hours}")
     private long expirationMinutes;
 
-    @Scheduled(fixedRate = 60 * 60 * 1000)
+    //@Scheduled(fixedRate = 60 * 60 * 1000)
     public void cancelExpiredOrders(){
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(expirationMinutes);
 
