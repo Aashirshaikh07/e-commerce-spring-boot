@@ -5,14 +5,18 @@ import com.aashir.ecommerce.dto.userdto.LoginResponse;
 import com.aashir.ecommerce.dto.userdto.RegisterRequest;
 import com.aashir.ecommerce.entity.User;
 import com.aashir.ecommerce.entity.UserStatus;
+import com.aashir.ecommerce.event.UserRegisteredEvent;
 import com.aashir.ecommerce.repository.UserRepository;
 import com.aashir.ecommerce.security.JwtService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronizationAdapter;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +25,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final ApplicationEventPublisher eventPublisher;
+
 
     public User registerUser(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
@@ -38,7 +44,21 @@ public class AuthService {
         user.setPhone(request.getPhone());
         user.setStatus(UserStatus.ACTIVE);
         user.setRole("USER");
-        return userRepository.save(user);
+
+        User savedUser = userRepository.save(user);
+
+        UserRegisteredEvent event = new UserRegisteredEvent(savedUser.getName(), savedUser.getEmail());
+        if(TransactionSynchronizationManager.isActualTransactionActive()){
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronizationAdapter() {
+                @Override
+                public void afterCommit() {
+                    eventPublisher.publishEvent(event);
+                }
+            });
+        }else {
+            eventPublisher.publishEvent(event);
+        }
+        return savedUser;
     }
 
     public LoginResponse login(LoginRequest loginRequest) {

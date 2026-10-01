@@ -1,8 +1,10 @@
 package com.aashir.ecommerce.service;
 
+import com.aashir.ecommerce.dto.userdto.RegisterRequest;
 import com.aashir.ecommerce.event.OrderCancelledEvent;
 import com.aashir.ecommerce.event.OrderCreatedEvent;
 import com.aashir.ecommerce.event.OrderItemEvent;
+import com.aashir.ecommerce.event.UserRegisteredEvent;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +50,114 @@ public class EmailService {
         );
 
         sendEmail(event.customerEmail(), subject, html);
+    }
+
+    public void sendWelcomeMessageForNewUser(UserRegisteredEvent registerRequest){
+        String subject = "Welcome to E-Commerce, " + registerRequest.name() + "!";
+        String html = buildWelcomeEmail(registerRequest.name());
+
+        sendEmail(registerRequest.email(), subject, html);
+        log.info("Welcome email sent");
+    }
+
+    private String buildWelcomeEmail(String customerName) {
+        return """
+        <!DOCTYPE html>
+        <html>
+        <body style="
+            margin:0;
+            padding:0;
+            background:#f5f5f5;
+            font-family:Arial,Helvetica,sans-serif;
+        ">
+
+            <div style="
+                max-width:700px;
+                margin:30px auto;
+                background:#ffffff;
+                border-radius:8px;
+                overflow:hidden;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08);
+            ">
+
+                <div style="
+                    background:#111827;
+                    color:white;
+                    padding:25px;
+                    text-align:center;
+                ">
+                    <h1 style="margin:0;">
+                        E-Commerce
+                    </h1>
+                </div>
+
+                <div style="padding:30px;">
+
+                    <h2>
+                        Hi %s,
+                    </h2>
+
+                    <p>
+                        Welcome aboard! We're thrilled to have you join us.
+                    </p>
+
+                    <p>
+                        Your account has been created successfully. You can now browse
+                        our catalog, add items to your cart, and enjoy a smooth,
+                        secure checkout experience.
+                    </p>
+
+                    <div style="
+                        background:#f9fafb;
+                        padding:15px;
+                        border-radius:6px;
+                        margin:20px 0;
+                    ">
+                        <strong>Account:</strong> Active<br>
+                        <strong>Member Since:</strong> Today
+                    </div>
+
+                    <div style="text-align:center; margin:25px 0;">
+                        <a href="https://yourstore.com/shop"
+                           style="
+                               background:#111827;
+                               color:#ffffff;
+                               text-decoration:none;
+                               padding:12px 28px;
+                               border-radius:6px;
+                               display:inline-block;
+                               font-size:15px;
+                           ">
+                            Start Shopping
+                        </a>
+                    </div>
+
+                    <p style="
+                        margin-top:30px;
+                        color:#666;
+                    ">
+                        If you did not create this account, please contact our support
+                        team immediately.
+                    </p>
+
+                </div>
+
+                <div style="
+                    background:#f3f4f6;
+                    padding:20px;
+                    text-align:center;
+                    color:#777;
+                    font-size:13px;
+                ">
+                    This is an automated email from E-Commerce.
+                    Please do not reply to this email.
+                </div>
+
+            </div>
+
+        </body>
+        </html>
+        """.formatted(customerName);
     }
 
 

@@ -28,7 +28,7 @@ public class ProductService {
         this.inventoryRepository = inventoryRepository;
     }
 
-    @CacheEvict(value = "products", key = "'all'")
+    /*@CacheEvict(value = "products", key = "'all'")*/
     public CreateProductResponse createProduct(CreateProductRequest request) {
         Product product = new Product();
 
@@ -47,7 +47,7 @@ public class ProductService {
        return mapToResponse(savedProduct);
     }
 
-    @Cacheable(value = "products", key = "'all'")
+    /*@Cacheable(value = "products", key = "'all'")*/
     public List<CreateProductResponse> getProductsAll(){
         List<Product> products = productRepository.findAll();
 
@@ -68,7 +68,7 @@ public class ProductService {
         return responsesAllProduct;
 
     }
-    @Cacheable(value = "products", key = "#id")
+   // @Cacheable(value = "products", key = "#id")
     public CreateProductResponse getProductById(Long id){
         Product product = productRepository.findById(id)
                 .orElseThrow(()->new ProductNotFoundException(id));
@@ -93,10 +93,10 @@ public class ProductService {
 
     //Updating products
 
-    @Caching(
+   /* @Caching(
             put = @CachePut(value = "products", key = "#id"),
             evict = @CacheEvict(value = "products", key = "'all'")
-    )
+    )*/
     public CreateProductResponse  updateProductById(Long id,UpdateProductRequest request){
 
         Product product = productRepository.findById(id)
@@ -121,16 +121,16 @@ public class ProductService {
         return mapToResponse(updatedProducts);
     }
 
-    @Caching(
+   /* @Caching(
             put = @CachePut(value = "products", key = "#id"),
             evict = @CacheEvict(value = "products", key = "'all'")
-    )
+    )*/
     public CreateProductResponse deleteProductById(Long id){
         Product product = productRepository.findById(id)
                 .orElseThrow(()->new ProductNotFoundException(id));
 
         product.setStatus(ProductStatus.INACTIVE);
-       Product delete = productRepository.save(product);
+        Product delete = productRepository.save(product);
         return mapToResponse(delete);
     }
 

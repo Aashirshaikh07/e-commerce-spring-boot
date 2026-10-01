@@ -66,4 +66,6 @@ public class EmailServiceTest {
         Mockito.verify(mailSender)
                 .send(mimeMessage);
     }
+
+
 }
