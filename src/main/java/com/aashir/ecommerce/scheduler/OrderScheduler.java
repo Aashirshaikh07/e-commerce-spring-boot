@@ -21,10 +21,10 @@ public class OrderScheduler {
     private final OrderRepository orderRepository;
     private final OrderService orderService;
 
-    @Value("${order.expiration.minutes}")
+    @Value("${order.expiration.hours}")
     private long expirationMinutes;
 
-    @Scheduled(fixedRate = 20000)
+    //@Scheduled(fixedRate = 60 * 60 * 1000)
     public void cancelExpiredOrders(){
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(expirationMinutes);
 

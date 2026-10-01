@@ -3,6 +3,7 @@ import com.aashir.ecommerce.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -34,5 +35,11 @@ public class OrderEventListener {
                 event.orderNumber()
         );
         emailService.sendOrderCancelledEmail(event);
+    }
+
+    @Async("emailTaskExecutor")
+    @EventListener
+    public void handleWelcomeMessageOnRegister(UserRegisteredEvent userRegisteredEvent){
+        emailService.sendWelcomeMessageForNewUser(userRegisteredEvent);
     }
 }

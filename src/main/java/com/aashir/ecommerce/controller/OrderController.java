@@ -40,7 +40,7 @@ public class OrderController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('USER')")
-    public ResponseEntity<CreateOrderResponse> getOrderById(@PathVariable Long id){
+    public ResponseEntity<CreateOrderResponse> getOrderById(@PathVariable Long id ){
         CreateOrderResponse response =  orderService.getOrderById(id);
         return ResponseEntity.ok(response);
     }

@@ -4,8 +4,10 @@ import com.aashir.ecommerce.dto.*;
 import com.aashir.ecommerce.entity.*;
 import com.aashir.ecommerce.event.OrderCancelledEvent;
 import com.aashir.ecommerce.event.OrderCreatedEvent;
+import com.aashir.ecommerce.event.OrderCreatedKafkaEvent;
 import com.aashir.ecommerce.event.OrderItemEvent;
 import com.aashir.ecommerce.exception.*;
+import com.aashir.ecommerce.kafka.OrderKafkaProducer;
 import com.aashir.ecommerce.repository.*;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
@@ -28,13 +30,13 @@ public class OrderService {
     private final InventoryService inventoryService;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
-
+    private final OrderKafkaProducer orderKafkaProducer;
     private static final Logger log =
             LoggerFactory.getLogger(OrderService.class);
 
     private final MeterRegistry meterRegistry;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, MeterRegistry meterRegistry) {
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, OrderKafkaProducer orderKafkaProducer, MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.orderItemRepository = orderItemRepository;
@@ -42,6 +44,7 @@ public class OrderService {
         this.inventoryService = inventoryService;
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
+        this.orderKafkaProducer = orderKafkaProducer;
         this.meterRegistry = meterRegistry;
     }
 
@@ -118,6 +121,14 @@ public class OrderService {
          );
 
          eventPublisher.publishEvent(event);
+        OrderCreatedKafkaEvent kafkaEvent = new OrderCreatedKafkaEvent(
+                savedOrder.getId(),
+                savedOrder.getOrderNumber(),
+                user.getId(),
+                savedOrder.getTotalAmount(),
+                createOrderRequest.getPaymentMethod()
+        );
+        orderKafkaProducer.publishOrderCreated(kafkaEvent);
 
         meterRegistry.counter("orders.created").increment();
 
@@ -250,6 +261,20 @@ public class OrderService {
             log.info("Restore inventory successfully with inventoryProductName={} and productCount",orderItem.getProduct().getProductName(),orderItem.getQuantity());
 
         }
+    }
+
+    public void markPaymentSuccessful(Long orderId){
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(()-> new RuntimeException("Order not found"));
+
+        if(!order.getStatus().canTransitionTo(OrderStatus.CONFIRMED)){
+            throw new IllegalStateException(
+                    "Order cannot be confirmed from status " + order.getStatus()
+            );
+        }
+        order.setStatus(OrderStatus.CONFIRMED);
+        orderRepository.save(order);
+        log.info("Payment succeeded for orderId ={}",order.getId());
     }
 
 }
