@@ -1,6 +1,5 @@
 package com.aashir.ecommerce.config;
 
-import com.aashir.ecommerce.event.OrderCreatedEvent;
 import com.aashir.ecommerce.event.OrderCreatedKafkaEvent;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;

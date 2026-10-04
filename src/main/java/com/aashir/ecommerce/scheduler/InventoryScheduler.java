@@ -24,7 +24,7 @@ public class InventoryScheduler {
 
     Set<Long> prodcutIds = new HashSet<>();
 
-    @Scheduled(fixedRate = 20000)
+   // @Scheduled(fixedRate = 20000)
     public void checkInventory()
     {
         List<Inventory> inventoryListLowStock = inventoryRepository.findByQuantityLessThanEqual(inventoryWarn);

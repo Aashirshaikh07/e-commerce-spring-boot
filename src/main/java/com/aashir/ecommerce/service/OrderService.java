@@ -277,4 +277,19 @@ public class OrderService {
         log.info("Payment succeeded for orderId ={}",order.getId());
     }
 
+  @Transactional
+    public void cancelOrder(Long orderId,String reason){
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(()-> new OrderNotFountException(orderId));
+
+
+      log.info(
+              "Cancelling orderId={} because {}",
+              orderId,
+              reason
+      );
+
+      updateOrderStatus(orderId, OrderStatus.CANCELLED);
+  }
+
 }
