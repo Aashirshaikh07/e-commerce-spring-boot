@@ -30,13 +30,13 @@ public class OrderService {
     private final InventoryService inventoryService;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final OrderKafkaProducer orderKafkaProducer;
+    private final OutboxService outboxService;
     private static final Logger log =
             LoggerFactory.getLogger(OrderService.class);
 
     private final MeterRegistry meterRegistry;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, OrderKafkaProducer orderKafkaProducer, MeterRegistry meterRegistry) {
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, OrderKafkaProducer orderKafkaProducer, OutboxService outboxService, MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.orderItemRepository = orderItemRepository;
@@ -44,7 +44,7 @@ public class OrderService {
         this.inventoryService = inventoryService;
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
-        this.orderKafkaProducer = orderKafkaProducer;
+        this.outboxService = outboxService;
         this.meterRegistry = meterRegistry;
     }
 
@@ -122,13 +122,21 @@ public class OrderService {
 
          eventPublisher.publishEvent(event);
         OrderCreatedKafkaEvent kafkaEvent = new OrderCreatedKafkaEvent(
+                UUID.randomUUID(),
                 savedOrder.getId(),
                 savedOrder.getOrderNumber(),
                 user.getId(),
                 savedOrder.getTotalAmount(),
                 createOrderRequest.getPaymentMethod()
         );
-        orderKafkaProducer.publishOrderCreated(kafkaEvent);
+        outboxService.saveEvent(
+                kafkaEvent.eventId(),
+                "OrderCreatedKafkaEvent",
+                "order-events",
+                kafkaEvent
+        );
+        //orderKafkaProducer.publishOrderCreated(kafkaEvent);
+
 
         meterRegistry.counter("orders.created").increment();
 
@@ -263,9 +271,7 @@ public class OrderService {
         }
     }
 
-    public void markPaymentSuccessful(Long orderId){
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(()-> new RuntimeException("Order not found"));
+    public void markPaymentSuccessful(Order order){
 
         if(!order.getStatus().canTransitionTo(OrderStatus.CONFIRMED)){
             throw new IllegalStateException(
@@ -278,18 +284,15 @@ public class OrderService {
     }
 
   @Transactional
-    public void cancelOrder(Long orderId,String reason){
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(()-> new OrderNotFountException(orderId));
-
+    public void cancelOrder(Order order,String reason){
 
       log.info(
               "Cancelling orderId={} because {}",
-              orderId,
+              order.getId(),
               reason
       );
 
-      updateOrderStatus(orderId, OrderStatus.CANCELLED);
+      updateOrderStatus(order.getId(), OrderStatus.CANCELLED);
   }
 
 }
