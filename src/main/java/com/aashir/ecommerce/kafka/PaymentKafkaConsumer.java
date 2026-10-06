@@ -11,6 +11,7 @@ import com.aashir.ecommerce.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -28,6 +29,7 @@ public class PaymentKafkaConsumer {
             groupId = "ecommerce-payment-group",
             containerFactory = "paymentSucceededKafkaListenerContainerFactory"
     )
+    @Transactional
     public void handlePaymentSucceeded(PaymentSucceededEvent event) {
 
         UUID eventId =event.eventId();
@@ -36,7 +38,6 @@ public class PaymentKafkaConsumer {
         }
         Order order = orderRepository.findById(event.orderId())
                 .orElseThrow(()-> new RuntimeException("Order not found"));
-
         orderService.markPaymentSuccessful(order);
 
         ProcessEvent  processEvent = new ProcessEvent();

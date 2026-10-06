@@ -30,13 +30,13 @@ public class OrderService {
     private final InventoryService inventoryService;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final OrderKafkaProducer orderKafkaProducer;
+    private final OutboxService outboxService;
     private static final Logger log =
             LoggerFactory.getLogger(OrderService.class);
 
     private final MeterRegistry meterRegistry;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, OrderKafkaProducer orderKafkaProducer, MeterRegistry meterRegistry) {
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, OrderKafkaProducer orderKafkaProducer, OutboxService outboxService, MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.orderItemRepository = orderItemRepository;
@@ -44,7 +44,7 @@ public class OrderService {
         this.inventoryService = inventoryService;
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
-        this.orderKafkaProducer = orderKafkaProducer;
+        this.outboxService = outboxService;
         this.meterRegistry = meterRegistry;
     }
 
@@ -129,7 +129,14 @@ public class OrderService {
                 savedOrder.getTotalAmount(),
                 createOrderRequest.getPaymentMethod()
         );
-        orderKafkaProducer.publishOrderCreated(kafkaEvent);
+        outboxService.saveEvent(
+                kafkaEvent.eventId(),
+                "OrderCreatedKafkaEvent",
+                "order-events",
+                kafkaEvent
+        );
+        //orderKafkaProducer.publishOrderCreated(kafkaEvent);
+
 
         meterRegistry.counter("orders.created").increment();
 
