@@ -1,9 +1,6 @@
 package com.aashir.ecommerce.controller;
 
-import com.aashir.ecommerce.dto.CreateOrderRequest;
-import com.aashir.ecommerce.dto.CreateOrderResponse;
-import com.aashir.ecommerce.dto.ResponseUpdatedOrder;
-import com.aashir.ecommerce.dto.StatusUpdateRequest;
+import com.aashir.ecommerce.dto.*;
 import com.aashir.ecommerce.entity.OrderStatus;
 import com.aashir.ecommerce.service.OrderService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -31,11 +28,15 @@ public class OrderController {
 
     @PostMapping
     @PreAuthorize("hasRole('USER')")
-    public ResponseEntity<CreateOrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request){
+    public ResponseEntity<CreateOrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request
+            ,@RequestHeader("Idempotency-Key") String idempotencyKey) {
 
-        CreateOrderResponse response =  orderService.createOrder(request);
+        OrderCreationResult result = orderService.createOrder(request,idempotencyKey);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        HttpStatus status = result.replay()
+                ?HttpStatus.OK
+                : HttpStatus.CREATED;
+        return ResponseEntity.status(status).body(result.response());
     }
 
     @GetMapping("/{id}")
