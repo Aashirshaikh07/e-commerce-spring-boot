@@ -16,10 +16,9 @@ import org.springframework.stereotype.Service;
 import com.aashir.ecommerce.security.SecurityUtils;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
+import org.springframework.dao.DataIntegrityViolationException;
 import java.util.List;
-import java.util.UUID;
+
 
 @Service
 public class OrderService {
@@ -31,12 +30,16 @@ public class OrderService {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final OutboxService outboxService;
+    private final OrderIdempotencyRepository orderIdempotencyRepository;
+    private final OrderRequestFingerprint orderRequestFingerprint;
+    private final OrderCreationTransactionService orderCreationTransactionService;
+    private final OrderIdempotencyRecoveryService orderIdempotencyRecoveryService;
     private static final Logger log =
             LoggerFactory.getLogger(OrderService.class);
 
     private final MeterRegistry meterRegistry;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, OrderKafkaProducer orderKafkaProducer, OutboxService outboxService, MeterRegistry meterRegistry) {
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, OrderKafkaProducer orderKafkaProducer, OutboxService outboxService, OrderIdempotencyRepository orderIdempotencyRepository, OrderRequestFingerprint orderRequestFingerprint, OrderCreationTransactionService orderCreationTransactionService, OrderIdempotencyRecoveryService orderIdempotencyRecoveryService, MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.orderItemRepository = orderItemRepository;
@@ -45,104 +48,82 @@ public class OrderService {
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
         this.outboxService = outboxService;
+        this.orderIdempotencyRepository = orderIdempotencyRepository;
+        this.orderRequestFingerprint = orderRequestFingerprint;
+        this.orderCreationTransactionService = orderCreationTransactionService;
+        this.orderIdempotencyRecoveryService = orderIdempotencyRecoveryService;
         this.meterRegistry = meterRegistry;
     }
 
-    @Transactional
-    public CreateOrderResponse createOrder(CreateOrderRequest createOrderRequest) {
-        String email = SecurityUtils.getCurrentUserEmail();
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(()->new RuntimeException("User not found"));
 
-        log.info("Creating new order with email ={} and item={}",email,+createOrderRequest.getItems().size());
-        Order order = new Order();
+    public OrderCreationResult  createOrder(CreateOrderRequest createOrderRequest,String idempotencyKey) {
+        validateIdempotencyKey(idempotencyKey);
 
-        order.setOrderNumber("ORD-"+ UUID.randomUUID());
-        order.setStatus(OrderStatus.PENDING);
-        order.setUser(user);
+        User user = SecurityUtils.getCurrentUser();
 
-        BigDecimal totalAmount =  BigDecimal.ZERO;
+        String fingerprint = orderRequestFingerprint.calculate(createOrderRequest);
 
-        for(OrderItemRequest itemRequest : createOrderRequest.getItems()){
-            Product product = productRepository.findById(itemRequest.getProductId())
-                    .orElseThrow(()-> new ProductNotFoundException(itemRequest.getProductId()));
+        var existingRecord = orderIdempotencyRepository.findWithOrderByUserIdAndIdempotencyKey(
+                user.getId(),
+                idempotencyKey
+        );
 
-            if(product.getStatus() == ProductStatus.INACTIVE){
-                throw new ProductIsNotActive(product.getId());
+        if (existingRecord.isPresent()) {
+            OrderIdempotency record = existingRecord.get();
+
+            if (!record.getRequestFingerprint().equals(fingerprint)) {
+                throw new IdempotencyConflictException("Idempotency key has already been used with a different request");
             }
-            Inventory inventory = inventoryRepository.findByProductId(product.getId())
-                    .orElseThrow(()-> new InventoryNotFoundException(product.getId()));
 
-            if(inventory.getQuantity() < itemRequest.getQuantity()){
-                throw new InsufficientStockException(product.getId());
+            if (record.getOrder() == null) {
+                throw new IllegalStateException(
+                        "Idempotency record exists without an associated order"
+                );
             }
-            inventory.setQuantity(
-                    inventory.getQuantity() - itemRequest.getQuantity()
+                log.info(
+                        "Returning existing order for idempotency key, orderId={}",
+                        record.getOrder().getId()
+                );
+            return new OrderCreationResult(
+                    mapToResponse(record.getOrder()),
+                    true
+             );
+            }
+        try {
+            CreateOrderResponse response = orderCreationTransactionService.createOrder(
+                    createOrderRequest,
+                    user,
+                    idempotencyKey,
+                    fingerprint
             );
-
-            inventoryRepository.save(inventory);
-
-            BigDecimal price = product.getPrice();
-
-            BigDecimal subtotal = price.multiply(
-                    BigDecimal.valueOf(itemRequest.getQuantity())
+            return new OrderCreationResult(response,false);
+        }catch (DataIntegrityViolationException ex) {
+            var recoveredRecord = orderIdempotencyRecoveryService.findExisting(
+                    user.getId(),
+                    idempotencyKey
             );
+            if(recoveredRecord.isEmpty()){
+                throw ex;
+            }
 
-            OrderItem orderItem = new OrderItem();
+            OrderIdempotency record = recoveredRecord.get();
+            if (!record.getRequestFingerprint().equals(fingerprint)) {
+                throw new IdempotencyConflictException(
+                        "Idempotency key has already been used with a different request"
+                );
+            }
+            if (record.getOrder() == null) {
+                throw ex;
+            }
+            log.info("Recovered concurrent order request, orderId={}",
+                    record.getOrder().getId());
 
-            orderItem.setOrder(order);
-            orderItem.setProduct(product);
-            orderItem.setQuantity(itemRequest.getQuantity());
-            orderItem.setPrice(price);
-            orderItem.setSubtotal(subtotal);
-
-            order.getItems().add(orderItem);
-            totalAmount = totalAmount.add(subtotal);
+            return new OrderCreationResult(
+                    mapToResponse(record.getOrder()),
+                    true
+            );
         }
 
-        order.setTotalAmount(totalAmount);
-         Order savedOrder = orderRepository.save(order);
-
-         OrderCreatedEvent event = new OrderCreatedEvent(
-                 user.getName(),
-                 user.getEmail(),
-                 savedOrder.getOrderNumber(),
-                 savedOrder.getStatus(),
-                 savedOrder.getItems()
-                         .stream()
-                         .map(item->new OrderItemEvent(
-                                 item.getProduct().getProductName(),
-                                 item.getQuantity(),
-                                 item.getPrice(),
-                                 item.getSubtotal()
-                         ))
-                         .toList(),
-                 savedOrder.getTotalAmount()
-         );
-
-         eventPublisher.publishEvent(event);
-        OrderCreatedKafkaEvent kafkaEvent = new OrderCreatedKafkaEvent(
-                UUID.randomUUID(),
-                savedOrder.getId(),
-                savedOrder.getOrderNumber(),
-                user.getId(),
-                savedOrder.getTotalAmount(),
-                createOrderRequest.getPaymentMethod()
-        );
-        outboxService.saveEvent(
-                kafkaEvent.eventId(),
-                "OrderCreatedKafkaEvent",
-                "order-events",
-                kafkaEvent
-        );
-        //orderKafkaProducer.publishOrderCreated(kafkaEvent);
-
-
-        meterRegistry.counter("orders.created").increment();
-
-        log.info("Order created successfully: orderId={}", order.getId());
-
-         return mapToResponse(savedOrder);
     }
 
     private CreateOrderResponse mapToResponse(Order savedOrder){
@@ -169,6 +150,20 @@ public class OrderService {
 
         return createOrderResponse;
 
+    }
+
+    private void validateIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Idempotency-Key must not be blank"
+            );
+        }
+
+        if (idempotencyKey.length() > 100) {
+            throw new IllegalArgumentException(
+                    "Idempotency-Key must not exceed 100 characters"
+            );
+        }
     }
 
     public CreateOrderResponse getOrderById(Long order_id){

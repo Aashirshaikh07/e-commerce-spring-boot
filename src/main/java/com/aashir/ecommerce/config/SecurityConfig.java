@@ -61,6 +61,8 @@ public class SecurityConfig {
                                 "/actuator/metrics/**",
                                 "/actuator/prometheus"
                         ).permitAll()
+                        .requestMatchers("/internal-test/**")
+                        .permitAll()
                         .anyRequest()
                         .authenticated()
                 )

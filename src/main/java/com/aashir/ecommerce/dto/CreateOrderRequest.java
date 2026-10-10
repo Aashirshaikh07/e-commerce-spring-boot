@@ -6,7 +6,6 @@ import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
 
 public class CreateOrderRequest {
-    private PaymentMethod paymentMethod;
     @NotEmpty(message = "Order must contain at least one item")
     @Valid
     private List<OrderItemRequest> items;
@@ -25,11 +24,4 @@ public class CreateOrderRequest {
         this.items = items;
     }
 
-    public PaymentMethod getPaymentMethod() {
-        return paymentMethod;
-    }
-
-    public void setPaymentMethod(PaymentMethod paymentMethod) {
-        this.paymentMethod = paymentMethod;
-    }
 }

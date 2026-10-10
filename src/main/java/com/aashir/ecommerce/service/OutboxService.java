@@ -17,7 +17,7 @@ public class OutboxService {
     private final ObjectMapper objectMapper;
 
     public void saveEvent(UUID eventId, String eventType, String topic, Object event){
-
+        System.out.println("I am here");
         try {
             OutboxEvent outboxEvent = new OutboxEvent();
 

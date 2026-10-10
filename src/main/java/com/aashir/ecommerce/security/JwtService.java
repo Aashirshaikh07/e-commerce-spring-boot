@@ -19,10 +19,12 @@ public class JwtService {
             Base64.getEncoder().encode(SECRET.getBytes())
     );
 
-    public String generateToken(String username) {
+    public String generateToken(String username,Long userId,String role) {
         long expiration = 1000L * 60 * 60;
         return Jwts.builder()
                 .subject(username)
+                .claim("userId", userId)
+                .claim("role", role)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(key)
@@ -62,7 +64,11 @@ public class JwtService {
     }
 
     public String extractRole(String token) {
-        return extractClaim(token, Claims::getSubject);
+        return extractClaim(token, claims -> claims.get("role",String.class));
+    }
+
+    public Long extractUserId(String token) {
+        return extractClaim(token, claims -> claims.get("userId",Long.class));
     }
 
 
