@@ -30,6 +30,13 @@ public interface OrderRepository extends JpaRepository<Order,Long> {
             OrderStatus orderStatus, LocalDateTime cutoff
     );
 
-
-
+    @Query("""
+    SELECT DISTINCT o
+    FROM Order o
+    LEFT JOIN FETCH o.items i
+    LEFT JOIN FETCH i.product
+    WHERE o.user.id = :userId
+    ORDER BY o.createdAt DESC, o.id DESC
+""")
+    List<Order> findAllWithItemsByUserId(@Param("userId") Long userId);
 }

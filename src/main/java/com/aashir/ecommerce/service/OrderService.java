@@ -3,8 +3,6 @@ package com.aashir.ecommerce.service;
 import com.aashir.ecommerce.dto.*;
 import com.aashir.ecommerce.entity.*;
 import com.aashir.ecommerce.event.OrderCancelledEvent;
-import com.aashir.ecommerce.event.OrderCreatedEvent;
-import com.aashir.ecommerce.event.OrderCreatedKafkaEvent;
 import com.aashir.ecommerce.event.OrderItemEvent;
 import com.aashir.ecommerce.exception.*;
 import com.aashir.ecommerce.kafka.OrderKafkaProducer;
@@ -179,6 +177,38 @@ public class OrderService {
        return mapToResponse(order);
     }
 
+    @Transactional(readOnly = true)
+    public List<OrderSummaryResponse> getMyOrders() {
+        User user = SecurityUtils.getCurrentUser();
+
+        return orderRepository.findAllWithItemsByUserId(user.getId())
+                .stream()
+                .map(this::mapToSummary)
+                .toList();
+    }
+
+    private OrderSummaryResponse mapToSummary(Order order) {
+        List<OrderListItemResponse> items = order.getItems().stream()
+                .map(item -> new OrderListItemResponse(
+                        item.getProduct().getId(),
+                        item.getProduct().getProductName(),
+                        item.getProduct().getImageUrl(),
+                        item.getQuantity(),
+                        item.getPrice(),
+                        item.getSubtotal()
+                ))
+                .toList();
+
+        return new OrderSummaryResponse(
+                order.getId(),
+                order.getOrderNumber(),
+                order.getStatus().name(),
+                order.getTotalAmount(),
+                order.getCreateAt(),
+                items
+        );
+    }
+
 
     @Transactional
     public ResponseUpdatedOrder updateOrderStatus(Long order_id, OrderStatus requestedStatus){
@@ -210,16 +240,6 @@ public class OrderService {
        }
         return mapToUpdatedOrderResponse(order);
     }
-
-    //For Next all orders fetech
-//    String email = SecurityUtils.getCurrentUserEmail();
-//
-//    User user = userRepository.findUserWithOrdersByEmail(email)
-//            .orElseThrow(() -> new UserNotFoundException(email));
-//
-//    List<Order> orders = user.getOrders();
-
-
 
    private void publishOrderCancelledEvent(Order order){
 
