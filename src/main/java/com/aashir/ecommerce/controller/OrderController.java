@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @SecurityRequirement(name = "bearerAuth")
 @Tag(
@@ -46,7 +48,11 @@ public class OrderController {
         return ResponseEntity.ok(response);
     }
 
-
+    @GetMapping
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<List<OrderSummaryResponse>> getMyOrders() {
+        return ResponseEntity.ok(orderService.getMyOrders());
+    }
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasRole('ADMIN')")
