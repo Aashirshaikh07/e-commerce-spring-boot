@@ -21,8 +21,19 @@ public class Product {
     @Column(length = 2000)
     private String description;
 
+    @Column(name = "image_url", length = 2048)
+    private String imageUrl;
+
     @Column(nullable = false, length = 50)
     private String category;
+
+    @OneToOne(
+            mappedBy = "product",
+            fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    private ProductDetails productDetails;
 
     // Rule: Managed automatically, client cannot set initial status
     @Enumerated(EnumType.STRING)
@@ -77,7 +88,13 @@ public class Product {
         this.price = price;
     }
 
+    public String getImageUrl() {
+        return imageUrl;
+    }
 
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
     public String getDescription() {
         return description;
     }
@@ -92,6 +109,18 @@ public class Product {
 
     public void setCategory(String category) {
         this.category = category;
+    }
+
+    public ProductDetails getProductDetails() {
+        return productDetails;
+    }
+
+    public void setProductDetails(ProductDetails productDetails) {
+        this.productDetails = productDetails;
+
+        if (productDetails != null) {
+            productDetails.setProduct(this);
+        }
     }
 
     public ProductStatus getStatus() {

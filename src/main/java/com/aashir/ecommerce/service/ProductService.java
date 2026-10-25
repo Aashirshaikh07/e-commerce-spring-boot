@@ -13,9 +13,16 @@ import com.aashir.ecommerce.entity.ProductStatus;
 import com.aashir.ecommerce.exception.ProductNotFoundException;
 import com.aashir.ecommerce.repository.InventoryRepository;
 import com.aashir.ecommerce.repository.ProductRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import com.aashir.ecommerce.specification.ProductSpecification;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import com.aashir.ecommerce.dto.ProductPageDetailsResponse;
+import org.springframework.transaction.annotation.Transactional;
+import java.math.BigDecimal;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -23,9 +30,14 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
-    public ProductService(ProductRepository productRepository, InventoryRepository inventoryRepository) {
+    private final ProductMixingService productMixingService;
+    private final ProductDetailsService productDetailsService;
+
+    public ProductService(ProductRepository productRepository, InventoryRepository inventoryRepository, ProductMixingService productMixingService, ProductDetailsService productDetailsService) {
         this.productRepository = productRepository;
         this.inventoryRepository = inventoryRepository;
+        this.productMixingService = productMixingService;
+        this.productDetailsService = productDetailsService;
     }
 
     /*@CacheEvict(value = "products", key = "'all'")*/
@@ -47,27 +59,161 @@ public class ProductService {
        return mapToResponse(savedProduct);
     }
 
-    /*@Cacheable(value = "products", key = "'all'")*/
-    public List<CreateProductResponse> getProductsAll(){
-        List<Product> products = productRepository.findAll();
+    @Transactional(readOnly = true)
+    public ProductPageDetailsResponse getProductPageDetails(Long id) {
+        ProductPageDetailsResponse details =
+                productDetailsService.getProductPageDetails(id);
 
-        List<CreateProductResponse> responsesAllProduct = new ArrayList<>();
+        Integer quantity = inventoryRepository.findByProductId(id)
+                .map(Inventory::getQuantity)
+                .orElse(0);
 
-        for (Product product : products) {
-            CreateProductResponse createProductResponse = new CreateProductResponse();
-            createProductResponse.setId(product.getId());
-            createProductResponse.setName(product.getProductName());
-            createProductResponse.setPrice(product.getPrice());
-            createProductResponse.setCategory(product.getCategory());
-            createProductResponse.setDescription(product.getDescription());
-            createProductResponse.setStatus(product.getStatus());
-            createProductResponse.setCreatedAt(product.getCreatedAt());
-            createProductResponse.setUpdatedAt(product.getUpdatedAt());
-            responsesAllProduct.add(createProductResponse);
-        }
-        return responsesAllProduct;
+        boolean inStock = quantity > 0
+                && details.status() == ProductStatus.ACTIVE;
 
+        return new ProductPageDetailsResponse(
+                details.id(),
+                details.productName(),
+                details.price(),
+                details.description(),
+                details.imageUrl(),
+                details.category(),
+                details.status(),
+                details.createdAt(),
+                details.aboutThisItem(),
+                details.specifications(),
+                quantity,
+                inStock
+        );
     }
+
+    /*@Cacheable(value = "products", key = "'all'")*/
+    public Page<CreateProductResponse> getProductsAll(Pageable pageable) {
+        Page<Product> products = productRepository.findAll(pageable);
+
+            return products.map(product -> {
+                CreateProductResponse createProductResponse = new CreateProductResponse();
+                createProductResponse.setId(product.getId());
+                createProductResponse.setName(product.getProductName());
+                createProductResponse.setPrice(product.getPrice());
+                createProductResponse.setCategory(product.getCategory());
+                createProductResponse.setDescription(product.getDescription());
+                createProductResponse.setImageUrl(product.getImageUrl());
+                createProductResponse.setStatus(product.getStatus());
+                createProductResponse.setCreatedAt(product.getCreatedAt());
+                createProductResponse.setUpdatedAt(product.getUpdatedAt());
+                return createProductResponse;
+            });
+    }
+
+    public Page<CreateProductResponse> searchProducts(
+            String category,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            String keyword,
+            String sortBy,
+            String direction,
+            Pageable pageable
+    ) {
+        // 1. Build product filters
+        Specification<Product> spec =
+                ProductSpecification.hasStatus(ProductStatus.ACTIVE);
+
+        boolean categorySelected =
+                category != null
+                        && !category.isBlank()
+                        && !"All".equalsIgnoreCase(category);
+
+        if (categorySelected) {spec = spec.and(ProductSpecification.hasCategory(category));}
+
+        if (minPrice != null) {
+            spec = spec.and(
+                    ProductSpecification.priceGreaterThanOrEqualTo(minPrice)
+            );
+        }
+
+        if (maxPrice != null) {
+            spec = spec.and(ProductSpecification.priceLessThanOrEqualTo(maxPrice));
+        }
+
+        if (keyword != null && !keyword.isBlank()) {
+            spec = spec.and(
+                    ProductSpecification.keywordContains(keyword)
+            );
+        }
+
+        // 2. Validate sorting options
+        Sort.Direction sortDirection =
+                "desc".equalsIgnoreCase(direction)
+                        ? Sort.Direction.DESC
+                        : Sort.Direction.ASC;
+
+        String safeSortBy = switch (
+                sortBy == null ? "createdAt" : sortBy
+                ) {
+            case "price" -> "price";
+            case "name" -> "productName";
+            case "createdAt" -> "createdAt";
+            default -> throw new IllegalArgumentException(
+                    "Invalid sortBy. Allowed values: price, name, createdAt"
+            );
+        };
+
+        // 3. Mix categories only for the default All-tab ordering
+        boolean useMixedOrdering =
+                !categorySelected
+                        && "createdAt".equals(safeSortBy)
+                        && sortDirection == Sort.Direction.DESC;
+
+        if (useMixedOrdering) {
+            // Retrieve all products matching the filters in stable order
+            List<Product> matchingProducts = productRepository.findAll(
+                    spec,
+                    Sort.by(Sort.Direction.DESC, "createdAt")
+                            .and(Sort.by(Sort.Direction.ASC, "id"))
+            );
+
+            // Delegate category mixing to the separate service
+            List<Product> mixedProducts =
+                    productMixingService.mixByCategory(matchingProducts);
+
+            // 4. Apply pagination after mixing
+            int start = (int) Math.min(
+                    (long) pageable.getPageNumber() * pageable.getPageSize(),
+                    mixedProducts.size()
+            );
+
+            int end = (int) Math.min(
+                    (long) start + pageable.getPageSize(),
+                    mixedProducts.size()
+            );
+
+            List<CreateProductResponse> content =
+                    mixedProducts.subList(start, end)
+                            .stream()
+                            .map(this::mapToResponse)
+                            .toList();
+
+            return new org.springframework.data.domain.PageImpl<>(
+                    content,
+                    pageable,
+                    mixedProducts.size()
+            );
+        }
+
+        // 5. Normal database sorting and pagination for other requests
+        Pageable sortedPageable =
+                org.springframework.data.domain.PageRequest.of(
+                        pageable.getPageNumber(),
+                        pageable.getPageSize(),
+                        Sort.by(sortDirection, safeSortBy)
+                                .and(Sort.by(Sort.Direction.ASC, "id"))
+                );
+
+        return productRepository.findAll(spec, sortedPageable)
+                .map(this::mapToResponse);
+    }
+
    // @Cacheable(value = "products", key = "#id")
     public CreateProductResponse getProductById(Long id){
         Product product = productRepository.findById(id)
@@ -84,6 +230,7 @@ public class ProductService {
         response.setPrice(product.getPrice());
         response.setCategory(product.getCategory());
         response.setDescription(product.getDescription());
+        response.setImageUrl(product.getImageUrl());
         response.setStatus(product.getStatus());
         response.setCreatedAt(product.getCreatedAt());
         response.setUpdatedAt(product.getUpdatedAt());
