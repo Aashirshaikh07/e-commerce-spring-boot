@@ -2,18 +2,23 @@ package com.aashir.ecommerce.controller;
 
 import com.aashir.ecommerce.dto.CreateProductRequest;
 import com.aashir.ecommerce.dto.CreateProductResponse;
+import com.aashir.ecommerce.dto.ProductPageDetailsResponse;
 import com.aashir.ecommerce.dto.UpdateProductRequest;
 import com.aashir.ecommerce.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import java.math.BigDecimal;
 
-import java.util.List;
+
 
 @RestController
 @RequestMapping("/api/v1")
@@ -23,16 +28,10 @@ import java.util.List;
 )
 public class ProductController {
 
-    private ProductService productService;
-    public  ProductController(ProductService productService){
+    private final ProductService productService;
+    
+    public  ProductController(ProductService productService ){
         this.productService = productService;
-    }
-
-
-    @GetMapping("/products")
-    public ResponseEntity<List<CreateProductResponse>> getProducts(){
-        List<CreateProductResponse> products = productService.getProductsAll();
-        return  new ResponseEntity<>(products, HttpStatus.OK);
     }
 
     @Operation(summary = "Create product")
@@ -48,9 +47,11 @@ public class ProductController {
     }
 
     @GetMapping("/products/{id}")
-    public ResponseEntity<CreateProductResponse> getProductById(@PathVariable Long id){
-        CreateProductResponse product = productService.getProductById(id);
-        return ResponseEntity.ok(product);
+    public ResponseEntity<ProductPageDetailsResponse> getProductById(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(
+                productService.getProductPageDetails(id)
+        );
     }
 
     @Operation(summary = "Update product")
@@ -73,5 +74,69 @@ public class ProductController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/products")
+    public ResponseEntity<Page<CreateProductResponse>> getProducts(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction
+    ) {
+        if (page < 0) {
+            throw new IllegalArgumentException(
+                    "Page number cannot be negative"
+            );
+        }
+
+        if (size < 1 || size > 40) {
+            throw new IllegalArgumentException(
+                    "Page size must be between 1 and 40"
+            );
+        }
+
+        if (minPrice != null && minPrice.signum() < 0) {
+            throw new IllegalArgumentException(
+                    "Minimum price cannot be negative"
+            );
+        }
+
+        if (maxPrice != null && maxPrice.signum() < 0) {
+            throw new IllegalArgumentException(
+                    "Maximum price cannot be negative"
+            );
+        }
+
+        if (minPrice != null && maxPrice != null
+                && minPrice.compareTo(maxPrice) > 0) {
+            throw new IllegalArgumentException(
+                    "Minimum price cannot exceed maximum price"
+            );
+        }
+
+        if (!"asc".equalsIgnoreCase(direction)
+                && !"desc".equalsIgnoreCase(direction)) {
+            throw new IllegalArgumentException(
+                    "Direction must be asc or desc"
+            );
+        }
+
+        Pageable pageable = PageRequest.of(page, size);
+
+        Page<CreateProductResponse> products =
+                productService.searchProducts(
+                        category,
+                        minPrice,
+                        maxPrice,
+                        keyword,
+                        sortBy,
+                        direction,
+                        pageable
+                );
+
+        return ResponseEntity.ok(products);
+    }
 
 }

@@ -11,6 +11,7 @@ public class CreateProductResponse {
  private String description;
  private BigDecimal price;
  private String category;
+ private String imageUrl;
  private ProductStatus status;
  private LocalDateTime createdAt;
  private LocalDateTime updatedAt;
@@ -23,6 +24,13 @@ public class CreateProductResponse {
         this.id = id;
     }
 
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
     public String getName() {
         return name;
     }
