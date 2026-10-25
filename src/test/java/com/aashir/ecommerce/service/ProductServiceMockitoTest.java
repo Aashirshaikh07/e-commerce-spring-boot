@@ -6,14 +6,17 @@ import com.aashir.ecommerce.dto.UpdateProductRequest;
 import com.aashir.ecommerce.entity.Product;
 import com.aashir.ecommerce.entity.ProductStatus;
 import com.aashir.ecommerce.exception.ProductNotFoundException;
+import com.aashir.ecommerce.repository.InventoryRepository;
 import com.aashir.ecommerce.repository.ProductRepository;
-import org.junit.jupiter.api.BeforeEach;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -32,6 +35,15 @@ public class ProductServiceMockitoTest {
 
     @InjectMocks
     private ProductService productService;
+
+    @Mock
+    private InventoryRepository inventoryRepository;
+
+    @Mock
+    private ProductMixingService productMixingService;
+
+    @Mock
+    private ProductDetailsService productDetailsService;
 
     @Test
     void shouldCreateProduct(){
@@ -102,17 +114,18 @@ public class ProductServiceMockitoTest {
 
     }
     @Test
-    void shouldReturnEmptyListWhenNoProductsExist() {
+    void shouldReturnEmptyPageWhenNoProductsExist() {
+        Pageable pageable = PageRequest.of(0, 10);
 
-        when(productRepository.findAll())
-                .thenReturn(List.of());
+        when(productRepository.findAll(pageable))
+                .thenReturn(Page.empty(pageable));
 
-        List<CreateProductResponse> responses =
-                productService.getProductsAll();
+        Page<CreateProductResponse> responses =
+                productService.getProductsAll(pageable);
 
         assertTrue(responses.isEmpty());
 
-        verify(productRepository).findAll();
+        verify(productRepository).findAll(pageable);
     }
 
     @Test
@@ -123,28 +136,28 @@ public class ProductServiceMockitoTest {
         product1.setProductName("Laptop");
         product1.setPrice(new BigDecimal("50000"));
         product1.setCategory("Electronics");
-       // product1.setStockQuantity(10);
 
         Product product2 = new Product();
         product2.setId(2L);
         product2.setProductName("Phone");
         product2.setPrice(new BigDecimal("30000"));
         product2.setCategory("Electronics");
-      //  product2.setStockQuantity(20);
 
-        when(productRepository.findAll())
-                .thenReturn(List.of(product1,product2));
+        Pageable pageable = PageRequest.of(0, 10);
 
-        List<CreateProductResponse> responses =
-                productService.getProductsAll();
+        when(productRepository.findAll(pageable))
+                .thenReturn(new PageImpl<>(List.of(product1, product2), pageable, 2));
 
-        assertEquals(2,responses.size());
+        Page<CreateProductResponse> responses =
+                productService.getProductsAll(pageable);
 
-        assertEquals(1L,responses.get(0).getId());
-        assertEquals("Laptop",responses.get(0).getName());
-        assertEquals("Phone",responses.get(1).getName());
+        assertEquals(2, responses.getTotalElements());
 
-        verify(productRepository,times(1)).findAll();
+        assertEquals(1L, responses.getContent().get(0).getId());
+        assertEquals("Laptop", responses.getContent().get(0).getName());
+        assertEquals("Phone", responses.getContent().get(1).getName());
+
+        verify(productRepository, times(1)).findAll(pageable);
     }
 
     @Test
