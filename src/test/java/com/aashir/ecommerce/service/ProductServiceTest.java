@@ -15,19 +15,37 @@ import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
 
 public class ProductServiceTest {
+
+    private ProductService createService(
+            ProductRepository productRepository,
+            InventoryRepository inventoryRepository
+    ) {
+        return new ProductService(
+                productRepository,
+                inventoryRepository,
+                mock(ProductMixingService.class),
+                mock(ProductDetailsService.class)
+        );
+    }
+
     @Test
     void getProductById_shouldReturnCorrectProduct() {
 
         ProductRepository productRepository =
-                Mockito.mock(ProductRepository.class);
+                mock(ProductRepository.class);
 
         InventoryRepository inventoryRepository =
-                Mockito.mock(InventoryRepository.class);
+                mock(InventoryRepository.class);
         ProductService productService =
-                new ProductService(productRepository,inventoryRepository);
-
+                new ProductService(
+                        productRepository,
+                        inventoryRepository,
+                        mock(ProductMixingService.class),
+                        mock(ProductDetailsService.class)
+                );
         Product product = new Product();
         product.setId(1L);
         product.setProductName("Laptop");
@@ -46,20 +64,19 @@ public class ProductServiceTest {
         //Assert
         assertEquals(1L, response.getId());
         assertEquals("Laptop",response.getName());
-        assertEquals(new BigDecimal(120000.34), response.getPrice());
-
+        assertEquals(new BigDecimal("120000.34"), response.getPrice());
     }
 
     @Test
     void  createProduct_shouldReturnCorrectProduct() {
     //Arrange
         ProductRepository productRepository =
-                Mockito.mock(ProductRepository.class);
+                mock(ProductRepository.class);
         InventoryRepository inventoryRepository =
-                Mockito.mock(InventoryRepository.class);
+                mock(InventoryRepository.class);
 
         ProductService productService =
-                new ProductService(productRepository,inventoryRepository);
+                createService(productRepository, inventoryRepository);
 
         CreateProductRequest request = new CreateProductRequest();
 
@@ -96,11 +113,20 @@ public class ProductServiceTest {
     @Test
     void deleteProductById_shouldSetStatusToInactive() {
         ProductRepository productRepository =
-                Mockito.mock(ProductRepository.class);
+                mock(ProductRepository.class);
         InventoryRepository inventoryRepository =
-                Mockito.mock(InventoryRepository.class);
+                mock(InventoryRepository.class);
+        ProductMixingService productMixingService =
+                mock(ProductMixingService.class);
+        ProductDetailsService productDetailsService =
+                mock(ProductDetailsService.class);
         ProductService productService =
-                new ProductService(productRepository,inventoryRepository);
+                new ProductService(
+                        productRepository,
+                        inventoryRepository,
+                        productMixingService,
+                        productDetailsService
+                );
 
         Product product = new Product();
         product.setId(1L);
