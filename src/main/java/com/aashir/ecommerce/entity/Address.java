@@ -24,8 +24,8 @@ public class Address {
     private User user;
 
     @Enumerated(EnumType.STRING)
-    @Column( nullable = false)
-    private ADDRESS_TYPE address_type;
+    @Column(name = "address_type", nullable = false)
+    private ADDRESS_TYPE addressType;
 
     @Column( nullable = false)
     private String area;
@@ -36,14 +36,15 @@ public class Address {
     @Column( nullable = false)
     private String state;
 
-    @Column( nullable = false)
-    private Integer pincode;
+    @Column( nullable = false,length = 6)
+    private String pincode;
 
-    private LocalDateTime last_update;
+    @Column(name = "last_update")
+    private LocalDateTime lastUpdate;
 
     @PrePersist
-    protected void onUpdate() {
-        last_update = LocalDateTime.now();
+    @PreUpdate
+    protected void touch() {
+        lastUpdate = LocalDateTime.now();
     }
-
 }
