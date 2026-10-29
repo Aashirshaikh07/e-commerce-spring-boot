@@ -26,15 +26,13 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final ApplicationEventPublisher eventPublisher;
+    private final NotificationEventFactory notificationEventFactory;
 
 
     public User registerUser(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email already in use");
         }
-//        if (userRepository.existsByUsername(request.getName())) {
-//            throw new RuntimeException("Username already in use");
-//        }
 
         User user = new User();
         user.setName(request.getName());
@@ -46,18 +44,7 @@ public class AuthService {
         user.setRole("USER");
 
         User savedUser = userRepository.save(user);
-
-        UserRegisteredEvent event = new UserRegisteredEvent(savedUser.getName(), savedUser.getEmail());
-        if(TransactionSynchronizationManager.isActualTransactionActive()){
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronizationAdapter() {
-                @Override
-                public void afterCommit() {
-                    eventPublisher.publishEvent(event);
-                }
-            });
-        }else {
-            eventPublisher.publishEvent(event);
-        }
+        eventPublisher.publishEvent(notificationEventFactory.userRegistered(user.getEmail(), user.getName()));
         return savedUser;
     }
 

@@ -81,10 +81,28 @@
 
     </appender>
 
+    <appender name="CHAIN_FILE"
+              class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/chain.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/chain-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>100MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <logger name="org.springframework" level="WARN"/>
     <logger name="org.hibernate" level="WARN"/>
     <logger name="org.apache.tomcat" level="WARN"/>
     <logger name="com.zaxxer.hikari" level="WARN"/>
+
+    <logger name="NOTIFICATION_CHAIN" level="INFO" additivity="false">
+        <appender-ref ref="CHAIN_FILE"/>
+    </logger>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>

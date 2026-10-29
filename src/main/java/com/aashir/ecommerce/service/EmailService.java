@@ -1,6 +1,5 @@
 package com.aashir.ecommerce.service;
 
-import com.aashir.ecommerce.dto.userdto.RegisterRequest;
 import com.aashir.ecommerce.event.OrderCancelledEvent;
 import com.aashir.ecommerce.event.OrderCreatedEvent;
 import com.aashir.ecommerce.event.OrderItemEvent;
