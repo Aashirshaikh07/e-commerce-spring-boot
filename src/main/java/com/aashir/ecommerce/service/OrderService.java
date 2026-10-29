@@ -32,12 +32,15 @@ public class OrderService {
     private final OrderRequestFingerprint orderRequestFingerprint;
     private final OrderCreationTransactionService orderCreationTransactionService;
     private final OrderIdempotencyRecoveryService orderIdempotencyRecoveryService;
+    private final NotificationEventFactory notificationEventFactory;
     private static final Logger log =
             LoggerFactory.getLogger(OrderService.class);
 
+    private static final Logger chain = LoggerFactory.getLogger("NOTIFICATION_CHAIN");
+
     private final MeterRegistry meterRegistry;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, OrderKafkaProducer orderKafkaProducer, OutboxService outboxService, OrderIdempotencyRepository orderIdempotencyRepository, OrderRequestFingerprint orderRequestFingerprint, OrderCreationTransactionService orderCreationTransactionService, OrderIdempotencyRecoveryService orderIdempotencyRecoveryService, MeterRegistry meterRegistry) {
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, OrderItemRepository orderItemRepository, InventoryRepository inventoryRepository, InventoryService inventoryService, UserRepository userRepository, ApplicationEventPublisher eventPublisher, OrderKafkaProducer orderKafkaProducer, OutboxService outboxService, OrderIdempotencyRepository orderIdempotencyRepository, OrderRequestFingerprint orderRequestFingerprint, OrderCreationTransactionService orderCreationTransactionService, OrderIdempotencyRecoveryService orderIdempotencyRecoveryService, NotificationEventFactory notificationEventFactory, MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.orderItemRepository = orderItemRepository;
@@ -50,6 +53,7 @@ public class OrderService {
         this.orderRequestFingerprint = orderRequestFingerprint;
         this.orderCreationTransactionService = orderCreationTransactionService;
         this.orderIdempotencyRecoveryService = orderIdempotencyRecoveryService;
+        this.notificationEventFactory = notificationEventFactory;
         this.meterRegistry = meterRegistry;
     }
 
@@ -286,6 +290,7 @@ public class OrderService {
         }
     }
 
+    @Transactional
     public void markPaymentSuccessful(Order order){
 
         if(!order.getStatus().canTransitionTo(OrderStatus.CONFIRMED)){
@@ -295,7 +300,9 @@ public class OrderService {
         }
         order.setStatus(OrderStatus.CONFIRMED);
         orderRepository.save(order);
+        eventPublisher.publishEvent(notificationEventFactory.orderConfirmed(order));
         log.info("Payment succeeded for orderId ={}",order.getId());
+        chain.info("1 SERVICE spring event published, orderId={}", order.getId());
     }
 
   @Transactional
@@ -308,6 +315,7 @@ public class OrderService {
       );
 
       updateOrderStatus(order.getId(), OrderStatus.CANCELLED);
+      eventPublisher.publishEvent(notificationEventFactory.orderCancelled(order));
   }
 
 }

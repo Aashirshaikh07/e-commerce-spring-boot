@@ -117,7 +117,7 @@ public class OrderCreationTransactionService {
         idempotency.setOrder(savedOrder);
         orderIdempotencyRepository.save(idempotency);
 
-        OrderCreatedEvent event = new OrderCreatedEvent(
+       /* OrderCreatedEvent event = new OrderCreatedEvent(
                 user.getName(),
                 user.getEmail(),
                 savedOrder.getOrderNumber(),
@@ -134,7 +134,7 @@ public class OrderCreationTransactionService {
                 savedOrder.getTotalAmount()
         );
 
-        eventPublisher.publishEvent(event);
+        eventPublisher.publishEvent(event);*/
         OrderCreatedKafkaEvent kafkaEvent = new OrderCreatedKafkaEvent(
                 UUID.randomUUID(),
                 savedOrder.getId(),
@@ -148,7 +148,6 @@ public class OrderCreationTransactionService {
                 "order-events",
                 kafkaEvent
         );
-        //orderKafkaProducer.publishOrderCreated(kafkaEvent);
 
 
         meterRegistry.counter("orders.created").increment();
