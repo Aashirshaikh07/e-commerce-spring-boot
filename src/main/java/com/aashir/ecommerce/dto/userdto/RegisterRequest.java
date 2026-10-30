@@ -2,6 +2,7 @@ package com.aashir.ecommerce.dto.userdto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public class RegisterRequest {
@@ -13,16 +14,15 @@ public class RegisterRequest {
     @NotBlank(message = "name must be required")
     private String email;
 
-    @NotBlank
-    @Size(min = 10,message = "phone number cannot be less than 10")
-    String phone;
+    @NotBlank(message = "Password is required")
+    @Pattern(regexp = "^[0-9]{10}$", message = "Phone number must be exactly 10 digits")
+    private String phone;
 
-    @Size(min = 6,message ="minimum 6 character required" )
+    @Size(min = 8,max = 72, message ="Password must be between 8 and 72 characters" )
     @NotBlank(message = "name must be required")
     private String password;
 
-    @Size(min = 6,message ="minimum 6 character required" )
-    @NotBlank(message = "name must be required")
+    @NotBlank(message = "confirm password must be required")
     private String confirmPassword;
 
     RegisterRequest(){
