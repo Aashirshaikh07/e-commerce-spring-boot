@@ -5,15 +5,18 @@ import com.aashir.ecommerce.dto.userdto.LoginResponse;
 import com.aashir.ecommerce.dto.userdto.RegisterRequest;
 import com.aashir.ecommerce.entity.User;
 import com.aashir.ecommerce.entity.UserStatus;
+import com.aashir.ecommerce.exception.DuplicateResourceException;
 import com.aashir.ecommerce.repository.UserRepository;
 import com.aashir.ecommerce.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -26,22 +29,35 @@ public class AuthService {
     private final NotificationEventFactory notificationEventFactory;
 
 
+    @Transactional
     public User registerUser(RegisterRequest request) {
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            throw new IllegalArgumentException("Passwords do not match");
+        }
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already in use");
+            throw new DuplicateResourceException("This email is already registered");
+        }
+        if (userRepository.existsByPhone(request.getPhone())) {
+            throw new DuplicateResourceException("This phone number is already registered");
         }
 
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-
         user.setPhone(request.getPhone());
         user.setStatus(UserStatus.ACTIVE);
         user.setRole("USER");
 
-        User savedUser = userRepository.save(user);
-        eventPublisher.publishEvent(notificationEventFactory.userRegistered(user.getEmail(), user.getName()));
+        User savedUser;
+        try {
+            savedUser = userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new DuplicateResourceException("Email or phone number is already registered");
+        }
+
+        eventPublisher.publishEvent(
+                notificationEventFactory.userRegistered(savedUser.getEmail(), savedUser.getName()));
         return savedUser;
     }
 

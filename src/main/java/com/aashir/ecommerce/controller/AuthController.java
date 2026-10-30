@@ -3,6 +3,7 @@ package com.aashir.ecommerce.controller;
 import com.aashir.ecommerce.dto.userdto.LoginRequest;
 import com.aashir.ecommerce.dto.userdto.LoginResponse;
 import com.aashir.ecommerce.dto.userdto.RegisterRequest;
+import com.aashir.ecommerce.dto.userdto.RegisterResponse;
 import com.aashir.ecommerce.entity.User;
 import com.aashir.ecommerce.service.AuthService;
 import jakarta.validation.Valid;
@@ -22,11 +23,11 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<User> register(@Valid @RequestBody RegisterRequest registerRequest) {
+    public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest registerRequest) {
         User savedUser = authService.registerUser(registerRequest);
-
-        return new  ResponseEntity<User>(savedUser, HttpStatus.CREATED);
-
+        RegisterResponse response = new RegisterResponse(
+                savedUser.getId(), savedUser.getName(), savedUser.getEmail());
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/login")
