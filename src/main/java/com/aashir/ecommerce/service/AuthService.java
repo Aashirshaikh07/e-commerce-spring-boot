@@ -5,7 +5,6 @@ import com.aashir.ecommerce.dto.userdto.LoginResponse;
 import com.aashir.ecommerce.dto.userdto.RegisterRequest;
 import com.aashir.ecommerce.entity.User;
 import com.aashir.ecommerce.entity.UserStatus;
-import com.aashir.ecommerce.event.UserRegisteredEvent;
 import com.aashir.ecommerce.repository.UserRepository;
 import com.aashir.ecommerce.security.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -15,8 +14,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionSynchronizationAdapter;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
