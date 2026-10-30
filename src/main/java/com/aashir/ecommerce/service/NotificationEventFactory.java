@@ -56,4 +56,15 @@ public class NotificationEventFactory {
                 order.getUser().getName(),
                 data);
     }
+
+    public NotificationEvent passwordResetOtp(String email,String name, String otp,int expiresInMinutes,Long otpId){
+        return new NotificationEvent(
+                "password-reset-" +otpId,
+                NotificationType.PASSWORD_RESET_OTP,
+                Instant.now(),
+                email,
+                name,
+                Map.of("otp", otp, "expiresInMinutes", expiresInMinutes)
+        );
+    }
 }
