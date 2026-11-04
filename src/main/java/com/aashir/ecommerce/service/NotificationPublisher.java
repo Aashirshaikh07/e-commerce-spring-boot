@@ -3,6 +3,7 @@ package com.aashir.ecommerce.service;
 import com.aashir.ecommerce.event.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -11,12 +12,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class NotificationPublisher {
     private static final Logger log = LoggerFactory.getLogger(NotificationPublisher.class);
-    private static final String TOPIC = "notification-events";
+    private final String topic;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     private static final Logger chain = LoggerFactory.getLogger("NOTIFICATION_CHAIN");
 
-    public NotificationPublisher(KafkaTemplate<String, Object> kafkaTemplate) {
+    public NotificationPublisher(@Value("${app.kafka.notification-topic}") String topic, KafkaTemplate<String, Object> kafkaTemplate) {
+        this.topic = topic;
         this.kafkaTemplate = kafkaTemplate;
     }
 
@@ -25,7 +27,7 @@ public class NotificationPublisher {
         chain.info("3 PUBLISHER sending to kafka, eventId={}", event.eventId());
 
         try {
-            kafkaTemplate.send(TOPIC,event.recipientEmail(),event).whenComplete((result,ex)->{
+            kafkaTemplate.send(topic,event.recipientEmail(),event).whenComplete((result, ex)->{
                 if(ex!=null){
                     log.error("Failed to deliver notification event id={}", event.eventId(), ex);
                 } else {
