@@ -75,6 +75,8 @@ class OrderServiceTest {
     private NotificationEventFactory notificationEventFactory;
     @Mock
     private ProcessedEventRepository processedEventRepository;
+    @Mock
+    private LatePaymentReviewRepository latePaymentReviewRepository;
 
     private SimpleMeterRegistry meterRegistry;
     private OrderService orderService;
@@ -199,7 +201,9 @@ class OrderServiceTest {
             processedIds.add(event.getEventId());
             return event;
         });
-        return new PaymentKafkaConsumer(orderService, orderRepository, processedEventRepository);
+        return new PaymentKafkaConsumer(
+                orderService, orderRepository, processedEventRepository, latePaymentReviewRepository
+        );
     }
 
     private void assertEventsProcessedOnce(UUID firstId, UUID secondId) {

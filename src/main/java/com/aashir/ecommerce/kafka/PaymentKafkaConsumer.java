@@ -1,10 +1,12 @@
 package com.aashir.ecommerce.kafka;
 
+import com.aashir.ecommerce.entity.LatePaymentReview;
 import com.aashir.ecommerce.entity.Order;
 import com.aashir.ecommerce.entity.OrderStatus;
 import com.aashir.ecommerce.entity.ProcessEvent;
 import com.aashir.ecommerce.event.PaymentFailedEvent;
 import com.aashir.ecommerce.event.PaymentSucceededEvent;
+import com.aashir.ecommerce.repository.LatePaymentReviewRepository;
 import com.aashir.ecommerce.repository.OrderRepository;
 import com.aashir.ecommerce.repository.ProcessedEventRepository;
 import com.aashir.ecommerce.service.OrderService;
@@ -25,6 +27,7 @@ public class PaymentKafkaConsumer {
     private final OrderService orderService;
     private final OrderRepository orderRepository;
     private final ProcessedEventRepository processedEventRepository;
+    private final LatePaymentReviewRepository latePaymentReviewRepository;
 
     @KafkaListener(
             topics = "payment-succeeded",
@@ -40,6 +43,14 @@ public class PaymentKafkaConsumer {
         }
         Order order = orderRepository.findById(event.orderId())
                 .orElseThrow(()-> new RuntimeException("Order not found"));
+
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            latePaymentReviewRepository.save(new LatePaymentReview(
+                    eventId, order.getId(), event.paymentId(), event.amount()
+            ));
+            markProcessed(eventId);
+            return;
+        }
 
         if (!order.getStatus().canTransitionTo(OrderStatus.CONFIRMED)) {
             log.error(
