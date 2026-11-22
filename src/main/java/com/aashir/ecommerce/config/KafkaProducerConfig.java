@@ -3,6 +3,7 @@ package com.aashir.ecommerce.config;
 import com.aashir.ecommerce.event.OrderCreatedKafkaEvent;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
@@ -15,13 +16,19 @@ import java.util.Map;
 @Configuration
 public class KafkaProducerConfig {
 
+    private final String bootstrapServers;
+
+    public KafkaProducerConfig(@Value("${spring.kafka.bootstrap-servers:localhost:9092}") String bootstrapServers) {
+        this.bootstrapServers = bootstrapServers;
+    }
+
     @Bean
     public ProducerFactory<String, OrderCreatedKafkaEvent> producerFactory() {
         Map<String, Object> config = new HashMap<>();
 
         config.put(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                "localhost:9092"
+                bootstrapServers
         );
 
         config.put(
@@ -49,7 +56,7 @@ public class KafkaProducerConfig {
 
         config.put(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                "localhost:9092"
+                bootstrapServers
         );
 
         config.put(
