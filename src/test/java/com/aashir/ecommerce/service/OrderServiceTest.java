@@ -4,8 +4,11 @@ import com.aashir.ecommerce.dto.*;
 import com.aashir.ecommerce.entity.*;
 import com.aashir.ecommerce.event.NotificationEvent;
 import com.aashir.ecommerce.event.NotificationType;
+import com.aashir.ecommerce.event.PaymentFailedEvent;
+import com.aashir.ecommerce.event.PaymentSucceededEvent;
 import com.aashir.ecommerce.exception.*;
 import com.aashir.ecommerce.kafka.OrderKafkaProducer;
+import com.aashir.ecommerce.kafka.PaymentKafkaConsumer;
 import com.aashir.ecommerce.repository.*;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,14 +23,18 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
@@ -66,6 +73,10 @@ class OrderServiceTest {
     private OrderIdempotencyRecoveryService orderIdempotencyRecoveryService;
     @Mock
     private NotificationEventFactory notificationEventFactory;
+    @Mock
+    private ProcessedEventRepository processedEventRepository;
+    @Mock
+    private LatePaymentReviewRepository latePaymentReviewRepository;
 
     private SimpleMeterRegistry meterRegistry;
     private OrderService orderService;
@@ -135,6 +146,71 @@ class OrderServiceTest {
         verify(eventPublisher).publishEvent(notification);
     }
 
+    @Test
+    void lateCaptureAndReplayLeaveAnExpiredOrderCancelled() {
+        Order order = orderWithItem(OrderStatus.PENDING);
+        PaymentKafkaConsumer consumer = paymentConsumerFor(order);
+        NotificationEvent cancellation = notification(NotificationType.ORDER_CANCELLED);
+        when(orderItemRepository.findByOrderId(order.getId())).thenReturn(order.getItems());
+        when(notificationEventFactory.orderCancelled(order)).thenReturn(cancellation);
+        var expiry = new PaymentFailedEvent(UUID.randomUUID(), 10L, order.getId(), "Payment expired");
+        var capture = new PaymentSucceededEvent(UUID.randomUUID(), 10L, order.getId(), order.getTotalAmount());
+
+        consumer.handlePaymentFailed(expiry);
+        assertEquals(OrderStatus.CANCELLED, order.getStatus());
+        consumer.handlePaymentSucceeded(capture);
+        consumer.handlePaymentSucceeded(capture);
+
+        assertEquals(OrderStatus.CANCELLED, order.getStatus());
+        verify(orderRepository).save(order);
+        verify(inventoryService).addStock(10L, new UpdateStockRequest(2));
+        verify(eventPublisher).publishEvent(cancellation);
+        verify(notificationEventFactory, never()).orderConfirmed(order);
+        assertEventsProcessedOnce(expiry.eventId(), capture.eventId());
+    }
+
+    @Test
+    void lateFailureAndSuccessReplayLeaveAConfirmedOrderUntouched() {
+        Order order = order(OrderStatus.PENDING);
+        PaymentKafkaConsumer consumer = paymentConsumerFor(order);
+        NotificationEvent confirmation = notification(NotificationType.ORDER_CONFIRMED);
+        when(notificationEventFactory.orderConfirmed(order)).thenReturn(confirmation);
+        var capture = new PaymentSucceededEvent(UUID.randomUUID(), 10L, order.getId(), order.getTotalAmount());
+        var expiry = new PaymentFailedEvent(UUID.randomUUID(), 10L, order.getId(), "Payment expired");
+
+        consumer.handlePaymentSucceeded(capture);
+        assertEquals(OrderStatus.CONFIRMED, order.getStatus());
+        consumer.handlePaymentFailed(expiry);
+        consumer.handlePaymentSucceeded(capture);
+
+        assertEquals(OrderStatus.CONFIRMED, order.getStatus());
+        verify(orderRepository).save(order);
+        verify(eventPublisher).publishEvent(confirmation);
+        verify(inventoryService, never()).addStock(any(Long.class), any(UpdateStockRequest.class));
+        verify(notificationEventFactory, never()).orderCancelled(order);
+        assertEventsProcessedOnce(capture.eventId(), expiry.eventId());
+    }
+
+    private PaymentKafkaConsumer paymentConsumerFor(Order order) {
+        Set<UUID> processedIds = new HashSet<>();
+        when(orderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
+        when(processedEventRepository.existsById(any(UUID.class)))
+                .thenAnswer(call -> processedIds.contains(call.getArgument(0)));
+        when(processedEventRepository.save(any(ProcessEvent.class))).thenAnswer(call -> {
+            ProcessEvent event = call.getArgument(0);
+            processedIds.add(event.getEventId());
+            return event;
+        });
+        return new PaymentKafkaConsumer(
+                orderService, orderRepository, processedEventRepository, latePaymentReviewRepository
+        );
+    }
+
+    private void assertEventsProcessedOnce(UUID firstId, UUID secondId) {
+        verify(processedEventRepository).save(argThat(event -> firstId.equals(event.getEventId())));
+        verify(processedEventRepository).save(argThat(event -> secondId.equals(event.getEventId())));
+    }
+
     @ParameterizedTest
     @EnumSource(value = OrderStatus.class, mode = EnumSource.Mode.EXCLUDE, names = "PENDING")
     void markPaymentSuccessfulRejectsEveryStatusExceptPending(OrderStatus status) {
@@ -153,7 +229,7 @@ class OrderServiceTest {
     void cancelOrderCancelsRestoresStockAndPublishesNotification() {
         Order order = orderWithItem(OrderStatus.PENDING);
         NotificationEvent notification = notification(NotificationType.ORDER_CANCELLED);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(orderItemRepository.findByOrderId(1L)).thenReturn(order.getItems());
         when(notificationEventFactory.orderCancelled(order)).thenReturn(notification);
 
@@ -174,7 +250,7 @@ class OrderServiceTest {
     @EnumSource(value = OrderStatus.class, mode = EnumSource.Mode.EXCLUDE, names = "PENDING")
     void cancelOrderRejectsEveryStatusExceptPending(OrderStatus status) {
         Order order = order(status);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         assertThrows(InvalidOrderStatusTransitionException.class,
                 () -> orderService.cancelOrder(order, "Payment failed"));
@@ -187,7 +263,7 @@ class OrderServiceTest {
 
     @Test
     void updateOrderStatusFailsForUnknownOrder() {
-        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
+        when(orderRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
 
         assertThrows(OrderNotFountException.class,
                 () -> orderService.updateOrderStatus(99L, OrderStatus.CANCELLED));
@@ -196,7 +272,7 @@ class OrderServiceTest {
     @Test
     void updateOrderStatusMovesConfirmedOrderToShippedWithoutSideEffects() {
         Order order = order(OrderStatus.CONFIRMED);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         orderService.updateOrderStatus(1L, OrderStatus.SHIPPED);
 
@@ -209,7 +285,7 @@ class OrderServiceTest {
     @Test
     void updateOrderStatusRejectsAnInvalidJump() {
         Order order = order(OrderStatus.PENDING);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         assertThrows(InvalidOrderStatusTransitionException.class,
                 () -> orderService.updateOrderStatus(1L, OrderStatus.DELIVERED));

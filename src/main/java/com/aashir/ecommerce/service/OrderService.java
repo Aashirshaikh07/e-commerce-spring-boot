@@ -216,7 +216,7 @@ public class OrderService {
 
     @Transactional
     public ResponseUpdatedOrder updateOrderStatus(Long order_id, OrderStatus requestedStatus){
-        Order order = orderRepository.findById(order_id)
+        Order order = orderRepository.findByIdForUpdate(order_id)
                 .orElseThrow(()-> new OrderNotFountException(order_id));
 
         log.info("Updating orderStatus with orderId ={}",order.getId());

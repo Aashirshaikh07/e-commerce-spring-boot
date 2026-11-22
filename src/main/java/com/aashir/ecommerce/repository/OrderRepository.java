@@ -2,7 +2,9 @@ package com.aashir.ecommerce.repository;
 
 import com.aashir.ecommerce.entity.Order;
 import com.aashir.ecommerce.entity.OrderStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -15,6 +17,10 @@ public interface OrderRepository extends JpaRepository<Order,Long> {
     Optional<Order> findByOrderNumber(String orderNumber);
 
     Optional<Order> findById(Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") Long id);
 
     @Query("""
     SELECT o
