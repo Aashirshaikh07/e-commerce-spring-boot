@@ -193,7 +193,7 @@ class OrderServiceTest {
 
     private PaymentKafkaConsumer paymentConsumerFor(Order order) {
         Set<UUID> processedIds = new HashSet<>();
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(processedEventRepository.existsById(any(UUID.class)))
                 .thenAnswer(call -> processedIds.contains(call.getArgument(0)));
         when(processedEventRepository.save(any(ProcessEvent.class))).thenAnswer(call -> {
@@ -229,7 +229,7 @@ class OrderServiceTest {
     void cancelOrderCancelsRestoresStockAndPublishesNotification() {
         Order order = orderWithItem(OrderStatus.PENDING);
         NotificationEvent notification = notification(NotificationType.ORDER_CANCELLED);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(orderItemRepository.findByOrderId(1L)).thenReturn(order.getItems());
         when(notificationEventFactory.orderCancelled(order)).thenReturn(notification);
 
@@ -250,7 +250,7 @@ class OrderServiceTest {
     @EnumSource(value = OrderStatus.class, mode = EnumSource.Mode.EXCLUDE, names = "PENDING")
     void cancelOrderRejectsEveryStatusExceptPending(OrderStatus status) {
         Order order = order(status);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         assertThrows(InvalidOrderStatusTransitionException.class,
                 () -> orderService.cancelOrder(order, "Payment failed"));
@@ -263,7 +263,7 @@ class OrderServiceTest {
 
     @Test
     void updateOrderStatusFailsForUnknownOrder() {
-        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
+        when(orderRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
 
         assertThrows(OrderNotFountException.class,
                 () -> orderService.updateOrderStatus(99L, OrderStatus.CANCELLED));
@@ -272,7 +272,7 @@ class OrderServiceTest {
     @Test
     void updateOrderStatusMovesConfirmedOrderToShippedWithoutSideEffects() {
         Order order = order(OrderStatus.CONFIRMED);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         orderService.updateOrderStatus(1L, OrderStatus.SHIPPED);
 
@@ -285,7 +285,7 @@ class OrderServiceTest {
     @Test
     void updateOrderStatusRejectsAnInvalidJump() {
         Order order = order(OrderStatus.PENDING);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         assertThrows(InvalidOrderStatusTransitionException.class,
                 () -> orderService.updateOrderStatus(1L, OrderStatus.DELIVERED));

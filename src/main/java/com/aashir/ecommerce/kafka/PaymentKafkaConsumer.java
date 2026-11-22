@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 
@@ -37,17 +38,19 @@ public class PaymentKafkaConsumer {
     @Transactional
     public void handlePaymentSucceeded(PaymentSucceededEvent event) {
 
-        UUID eventId =event.eventId();
-        if (processedEventRepository.existsById(eventId)) {
+        UUID eventId = event.eventId();
+        Optional<Order> pendingEventOrder = findOrderForUnprocessedEvent(eventId, event.orderId());
+        if (pendingEventOrder.isEmpty()) {
             return;
         }
-        Order order = orderRepository.findById(event.orderId())
-                .orElseThrow(()-> new RuntimeException("Order not found"));
+        Order order = pendingEventOrder.get();
 
         if (order.getStatus() == OrderStatus.CANCELLED) {
-            latePaymentReviewRepository.save(new LatePaymentReview(
-                    eventId, order.getId(), event.paymentId(), event.amount()
-            ));
+            if (!latePaymentReviewRepository.existsByOrderIdAndPaymentId(order.getId(), event.paymentId())) {
+                latePaymentReviewRepository.save(new LatePaymentReview(
+                        eventId, order.getId(), event.paymentId(), event.amount()
+                ));
+            }
             markProcessed(eventId);
             return;
         }
@@ -64,11 +67,7 @@ public class PaymentKafkaConsumer {
         }
         orderService.markPaymentSuccessful(order);
 
-        ProcessEvent  processEvent = new ProcessEvent();
-        processEvent.setEventId(eventId);
-        processEvent.setProcessedAt(LocalDateTime.now());
-
-        processedEventRepository.save(processEvent);
+        markProcessed(eventId);
     }
 
     @KafkaListener(
@@ -80,11 +79,11 @@ public class PaymentKafkaConsumer {
     public void handlePaymentFailed(PaymentFailedEvent event) {
         UUID eventId = event.eventId();
 
-        if (processedEventRepository.existsById(eventId)) {
+        Optional<Order> pendingEventOrder = findOrderForUnprocessedEvent(eventId, event.orderId());
+        if (pendingEventOrder.isEmpty()) {
             return;
         }
-        Order order = orderRepository.findById(event.orderId())
-                .orElseThrow(()-> new RuntimeException("Order not found"));
+        Order order = pendingEventOrder.get();
 
         log.info("payment-failed received eventId={} orderId={} statusBefore={}", eventId, order.getId(), order.getStatus());
         if (!order.getStatus().canTransitionTo(OrderStatus.CANCELLED)) {
@@ -102,12 +101,21 @@ public class PaymentKafkaConsumer {
                 "Payment failed: " + event.reason()
         );
 
-        ProcessEvent processedEvent = new ProcessEvent();
-        processedEvent.setEventId(eventId);
-        processedEvent.setProcessedAt(LocalDateTime.now());
-
-        processedEventRepository.save(processedEvent);
+        markProcessed(eventId);
     }
+
+    private Optional<Order> findOrderForUnprocessedEvent(UUID eventId, Long orderId) {
+        // Acquire the order lock before the first snapshot read of the event/review tables.
+        Optional<Order> order = orderRepository.findByIdForUpdate(orderId);
+        if (processedEventRepository.existsById(eventId)) {
+            return Optional.empty();
+        }
+        if (order.isEmpty()) {
+            throw new IllegalStateException("Order not found");
+        }
+        return order;
+    }
+
     private void markProcessed(UUID eventId) {
         ProcessEvent processEvent = new ProcessEvent();
         processEvent.setEventId(eventId);
