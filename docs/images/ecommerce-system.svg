@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1140" height="620" viewBox="0 0 1140 620" role="img" aria-labelledby="title description">
+  <title id="title">E-commerce system architecture</title>
+  <desc id="description">The React storefront calls the order and payment APIs. The order service publishes order creation and notification events to Kafka. The payment service reads order events, calls Razorpay, receives signed webhooks, and publishes payment outcomes back to the order service. The notification service consumes notification events and delivers email.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 1 1 L 9 5 L 1 9 Z" fill="#526781"/>
+    </marker>
+  </defs>
+  <style>
+    .box { fill: #ffffff; stroke: #c9d6e5; stroke-width: 1.5; }
+    .edge { fill: none; stroke: #526781; stroke-width: 2; marker-end: url(#arrow); }
+    .heading { fill: #162535; font: 650 24px system-ui, 'Segoe UI', sans-serif; }
+    .detail { fill: #3b5065; font: 16px system-ui, 'Segoe UI', sans-serif; }
+    .label { fill: #344a63; font: 600 14px system-ui, 'Segoe UI', sans-serif; }
+    .topic { fill: #294764; font: 15px ui-monospace, 'DejaVu Sans Mono', monospace; }
+  </style>
+
+  <rect x="1" y="1" width="1138" height="618" rx="23" fill="#f2f6fc" stroke="#d4dfec" stroke-width="2"/>
+
+  <g class="edge">
+    <path d="M 175 116 V 188"/>
+    <path d="M 530 116 V 188"/>
+    <path d="M 670 221 H 812"/>
+    <path d="M 812 280 H 670"/>
+    <path d="M 85 308 V 444"/>
+    <path d="M 292 444 V 308"/>
+    <path d="M 426 444 V 308"/>
+    <path d="M 635 308 V 444"/>
+    <path d="M 670 510 H 812"/>
+  </g>
+
+  <g>
+    <rect class="box" x="40" y="33" width="630" height="83" rx="14"/>
+    <rect x="52" y="49" width="6" height="51" rx="3" fill="#6051a6"/>
+    <text class="heading" x="72" y="69">React storefront</text>
+    <text class="detail" x="72" y="94">Account, product browsing, checkout, and order history</text>
+
+    <rect class="box" x="40" y="188" width="280" height="120" rx="14"/>
+    <rect x="52" y="203" width="6" height="90" rx="3" fill="#3557a5"/>
+    <text class="heading" x="72" y="223">E-commerce API</text>
+    <text class="detail" x="72" y="252">Accounts, catalog, stock, orders</text>
+    <text class="detail" x="72" y="279">MySQL · Redis cache</text>
+
+    <rect class="box" x="390" y="188" width="280" height="120" rx="14"/>
+    <rect x="402" y="203" width="6" height="90" rx="3" fill="#1a786d"/>
+    <text class="heading" x="422" y="223">Payment service</text>
+    <text class="detail" x="422" y="252">Checkout and reconciliation</text>
+    <text class="detail" x="422" y="279">MySQL · transactional outbox</text>
+
+    <rect class="box" x="812" y="188" width="288" height="120" rx="14"/>
+    <rect x="824" y="203" width="6" height="90" rx="3" fill="#487397"/>
+    <text class="heading" x="844" y="223">Razorpay</text>
+    <text class="detail" x="844" y="252">Gateway and webhooks</text>
+    <text class="detail" x="844" y="279">Test Mode for local runs</text>
+
+    <rect class="box" x="40" y="444" width="630" height="137" rx="14"/>
+    <rect x="52" y="459" width="6" height="106" rx="3" fill="#526781"/>
+    <text class="heading" x="72" y="480">Kafka</text>
+    <text class="topic" x="72" y="508">order-events</text>
+    <text class="topic" x="72" y="533">payment-succeeded · payment-failed</text>
+    <text class="topic" x="72" y="558">notification-events</text>
+
+    <rect class="box" x="812" y="444" width="288" height="137" rx="14"/>
+    <rect x="824" y="459" width="6" height="106" rx="3" fill="#8f602c"/>
+    <text class="heading" x="844" y="480">Notification service</text>
+    <text class="detail" x="844" y="510">Transactional email</text>
+    <text class="detail" x="844" y="537">MySQL delivery log</text>
+  </g>
+
+  <g class="label">
+    <text x="188" y="156">Catalog, account, orders</text>
+    <text x="543" y="156">Checkout, verify, status</text>
+    <text x="741" y="210" text-anchor="middle">Gateway API</text>
+    <text x="741" y="269" text-anchor="middle">Signed webhook</text>
+    <text x="99" y="356"><tspan x="99">Orders and</tspan><tspan x="99" dy="19">notifications</tspan></text>
+    <text x="278" y="356" text-anchor="end"><tspan x="278">Payment</tspan><tspan x="278" dy="19">outcomes</tspan></text>
+    <text x="440" y="366">Orders</text>
+    <text x="621" y="356" text-anchor="end"><tspan x="621">Payment</tspan><tspan x="621" dy="19">outcomes</tspan></text>
+    <text x="741" y="499" text-anchor="middle">Notifications</text>
+  </g>
+</svg>
