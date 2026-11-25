@@ -64,3 +64,34 @@ After the Razorpay callback, the storefront calls `POST /payments/verify`. For a
 The payment service writes the capture and a success outbox entry together. When `payment-succeeded` reaches the order backend, the consumer locks the order row and checks `processed_events`. For a new success on a pending order, it moves the order to `CONFIRMED` and records the event ID in the same transaction. The Spring notification listener hands off the confirmation email event after commit. A replay of the same Kafka event skips the update and notification.
 
 The normal order progression is `PENDING → CONFIRMED → SHIPPED → DELIVERED`. A `payment-failed` event can cancel a pending order. The cancellation transaction restores stock. If a capture arrives after cancellation, the order stays `CANCELLED` and the consumer saves one `late_payment_reviews` entry per order and payment. [Payment consumer](src/main/java/com/aashir/ecommerce/kafka/PaymentKafkaConsumer.java) · [Order state rules](src/main/java/com/aashir/ecommerce/entity/OrderStatus.java)
+
+## Catalog and Inventory
+
+### Browse the catalog
+
+`GET /api/v1/products` lists active products. Shoppers can search by keyword in the product name and description, filter by category and price range, and sort by `price`, `name`, or `createdAt`. Pages start at `0` and default to 20 products, with a maximum page size of 40.
+
+```http
+GET /api/v1/products?category=electronics&minPrice=1000&sortBy=price&direction=asc&page=0&size=20
+```
+
+The default all-category view takes one product from each category per pass before slicing the results into pages. Each category keeps its newest-first order. Selecting a category or another sort uses database pagination with product ID as the tie-breaker. [Catalog query](src/main/java/com/aashir/ecommerce/service/ProductService.java#L109) · [Category mixing](src/main/java/com/aashir/ecommerce/service/ProductMixingService.java)
+
+### Load a product page
+
+`GET /api/v1/products/{id}` returns the product’s name, price, description, image URL, highlights, and grouped specifications, along with `stockQuantity` and `inStock`. The backend sets `inStock` when the product is active and has a positive available quantity. Administrators maintain highlights and specifications through `PUT /api/v1/products/{productId}/details`. [Product page response](src/main/java/com/aashir/ecommerce/dto/ProductPageDetailsResponse.java) · [Product details API](src/main/java/com/aashir/ecommerce/controller/ProductDetailsController.java)
+
+### Manage products and stock
+
+When an administrator creates a product, the service creates its inventory record from the submitted `stockQuantity`. Administrators can update core catalog fields. The delete endpoint sets the product to `INACTIVE`, taking it out of the catalog listing. [Catalog administration](src/main/java/com/aashir/ecommerce/controller/ProductController.java)
+
+Inventory routes require the `ADMIN` role.
+
+| Endpoint | Operation |
+|---|---|
+| `GET /api/v1/inventory/{productId}` | Read the current quantity. |
+| `POST /api/v1/inventory/{productId}` | Initialize stock for a product without an inventory record. |
+| `PATCH /api/v1/inventory/{productId}/add` | Increase stock by the requested quantity. |
+| `PATCH /api/v1/inventory/{productId}/remove` | Decrease stock. The service rejects a quantity larger than the available stock. |
+
+Availability can change between browsing and checkout. The order transaction checks the product’s active status and available quantity again before deducting stock. [Inventory service](src/main/java/com/aashir/ecommerce/service/InventoryService.java) · [Order creation transaction](src/main/java/com/aashir/ecommerce/service/OrderCreationTransactionService.java)
