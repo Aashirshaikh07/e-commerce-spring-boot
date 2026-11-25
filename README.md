@@ -95,3 +95,31 @@ Inventory routes require the `ADMIN` role.
 | `PATCH /api/v1/inventory/{productId}/remove` | Decrease stock. The service rejects a quantity larger than the available stock. |
 
 Availability can change between browsing and checkout. The order transaction checks the product’s active status and available quantity again before deducting stock. [Inventory service](src/main/java/com/aashir/ecommerce/service/InventoryService.java) · [Order creation transaction](src/main/java/com/aashir/ecommerce/service/OrderCreationTransactionService.java)
+
+## Accounts and Security
+
+### Registration and sign-in
+
+`POST /auth/register` requires a name, a valid email, a 10-digit phone number, and an 8–72 character password with matching confirmation. The service assigns the `USER` role and stores a BCrypt password hash. MySQL enforces uniqueness on email and phone. The API returns `201 Created` for a new account and `409 Conflict` for a duplicate email or phone number. [Registration service](src/main/java/com/aashir/ecommerce/service/AuthService.java#L32) · [Registration validation](src/main/java/com/aashir/ecommerce/dto/userdto/RegisterRequest.java) · [User model](src/main/java/com/aashir/ecommerce/entity/User.java)
+
+`POST /auth/login` authenticates the account and returns a signed bearer JWT with the email, user ID, and role. The token expires after **one hour**. Spring Security runs in stateless mode. For protected routes, the storefront sends `Authorization: Bearer <token>`. The JWT filter validates the token and loads the account’s current authorities for permission checks. An expired token returns `401 Unauthorized`. [Authentication API](src/main/java/com/aashir/ecommerce/controller/AuthController.java) · [JWT filter](src/main/java/com/aashir/ecommerce/security/JwtAuthenticationFilter.java)
+
+### Access rules and saved addresses
+
+| Access | Examples |
+|---|---|
+| Public | Register, sign in, request a password reset, and browse the catalog. |
+| `USER` | Place orders, view your own order history, and manage saved addresses. |
+| `ADMIN` | Manage products and inventory, and update order status. |
+
+`GET /api/v1/addresses` lists the signed-in customer’s addresses. `POST /api/v1/addresses` adds an address, up to a limit of **10** per customer. `PUT` and `DELETE` on `/api/v1/addresses/{id}` look up the record by both the address ID and the signed-in user’s ID. A lookup with no match returns `404 Not Found`. [Address API](src/main/java/com/aashir/ecommerce/controller/AddressController.java) · [Address service](src/main/java/com/aashir/ecommerce/service/AddressService.java)
+
+The local CORS policy allows the storefront at `http://localhost:5173`, including requests with `Authorization` and `Idempotency-Key` headers. [Security configuration](src/main/java/com/aashir/ecommerce/config/SecurityConfig.java)
+
+### Password reset
+
+1. **Request a code.** `POST /auth/forgot-password` accepts `email` and returns a generic acknowledgement. For an eligible active account, the service generates a six-digit one-time password, stores its BCrypt hash, and triggers email delivery through a Spring listener after the transaction commits.
+2. **Verify the code.** `POST /auth/verify-otp` accepts `email` and `otp`. A valid code returns `resetToken`. The service stores a SHA-256 hash of the token and records failed code attempts even when verification returns an error.
+3. **Set a new password.** `POST /auth/reset-password` accepts `resetToken` and `newPassword`. The service checks the token hash and expiry, updates the password with BCrypt, and marks the reset record `USED`.
+
+The OTP and reset token each expire after **10 minutes** by default. **Five failed attempts** invalidate the code. After the **60-second resend cooldown**, issuing a new code invalidates earlier active or verified reset records. [Password reset service](src/main/java/com/aashir/ecommerce/service/PasswordResetService.java) · [Reset settings](src/main/resources/application.properties#L46) · [After-commit listener](src/main/java/com/aashir/ecommerce/service/NotificationEventListener.java)
