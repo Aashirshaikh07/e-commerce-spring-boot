@@ -123,3 +123,35 @@ The local CORS policy allows the storefront at `http://localhost:5173`, includin
 3. **Set a new password.** `POST /auth/reset-password` accepts `resetToken` and `newPassword`. The service checks the token hash and expiry, updates the password with BCrypt, and marks the reset record `USED`.
 
 The OTP and reset token each expire after **10 minutes** by default. **Five failed attempts** invalidate the code. After the **60-second resend cooldown**, issuing a new code invalidates earlier active or verified reset records. [Password reset service](src/main/java/com/aashir/ecommerce/service/PasswordResetService.java) · [Reset settings](src/main/resources/application.properties#L46) · [After-commit listener](src/main/java/com/aashir/ecommerce/service/NotificationEventListener.java)
+
+## Events and Scheduling
+
+### Publish orders from the outbox
+
+The checkout transaction stores an `OrderCreatedKafkaEvent` in MySQL alongside the order and inventory changes. The event contains `eventId`, `orderId`, `orderNumber`, `userId`, and `totalAmount`. The payment service uses it to prepare a payment for the order.
+
+Spring runs `OutboxPublisher` on a **five-second schedule**. Each run reads rows whose `processedAt` is unset and sends them to Kafka using the order number as the key. The publisher waits for Kafka to acknowledge each send, then saves the processed timestamps for the completed batch. [Order creation transaction](src/main/java/com/aashir/ecommerce/service/OrderCreationTransactionService.java) · [Scheduled publisher](src/main/java/com/aashir/ecommerce/service/OutboxPublisher.java#L29)
+
+### Kafka topics
+
+| Topic | Direction | Record key | Purpose |
+|---|---|---|---|
+| `order-events` | Publishes | Order number | Requests payment preparation for a new order. |
+| `payment-succeeded` | Consumes | Order ID | Applies a verified capture to the order. |
+| `payment-failed` | Consumes | Order ID | Cancels a pending order and restores stock. |
+| `notification-events` | Publishes | Recipient email | Sends a notification request to the email service. |
+
+Both payment listeners run in `ecommerce-payment-group`. The events carry an event ID, payment ID, and order ID, plus the captured amount on success or the reason on failure. [Payment consumer](src/main/java/com/aashir/ecommerce/kafka/PaymentKafkaConsumer.java)
+
+### Send notifications after commit
+
+Registration, password reset, and payment-driven order changes raise Spring notification events. The `AFTER_COMMIT` listener hands each event to the publisher, which runs on `notificationExecutor`. The publisher sends it to the topic configured by `app.kafka.notification-topic`, which defaults to `notification-events`, and logs Kafka acknowledgements and send failures.
+
+| Notification | Trigger |
+|---|---|
+| `USER_REGISTERED` | A new account is created. |
+| `PASSWORD_RESET_OTP` | An eligible account requests a reset code. |
+| `ORDER_CONFIRMED` | A payment event confirms a pending order. |
+| `ORDER_CANCELLED` | A payment failure cancels a pending order. |
+
+The notification service consumes these messages and handles email delivery. [Spring listener](src/main/java/com/aashir/ecommerce/service/NotificationEventListener.java) · [Async publisher](src/main/java/com/aashir/ecommerce/service/NotificationPublisher.java)
