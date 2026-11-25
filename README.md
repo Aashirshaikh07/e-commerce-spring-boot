@@ -186,3 +186,50 @@ The order transaction has already committed when the notification publisher send
 The MySQL integration tests cover competing payment outcomes and failed database writes. A failed review insert leaves the event eligible for retry. A failed processed-marker insert rolls back the review so a retry can save both together.
 
 The cross-service tests send both event sequences through Kafka with simulated Razorpay responses, then verify order status, stock, review records, and notifications after replay. [Consumer integration tests](src/test/java/com/aashir/ecommerce/kafka/PaymentKafkaConsumerIntegrationTest.java) · [Kafka handoff tests](src/test/handoff/com/aashir/ecommerce/kafka/PaymentKafkaHandoffTest.java)
+
+## HTTP API and Data Model
+
+With the backend running locally, open Swagger UI to explore the API and send requests. The OpenAPI definition is also available as JSON for tools such as Postman. [Swagger UI](http://localhost:8080/swagger-ui.html) · [OpenAPI JSON](http://localhost:8080/v3/api-docs)
+
+### API routes
+
+| Area | Routes | Access |
+|---|---|---|
+| Accounts | `POST` routes under `/auth` for registration, login, and password reset | Public |
+| Catalog | `GET /api/v1/products` and `GET /api/v1/products/{id}` | Public |
+| Product details | `GET /api/v1/products/{productId}/details` and its `/page` subroute | Signed in |
+| Saved addresses | List, add, update, and delete under `/api/v1/addresses` | `USER`, scoped to their own addresses |
+| Orders | `POST /api/v1/orders`, `GET /api/v1/orders`, and `GET /api/v1/orders/{id}` | `USER`, scoped to their own orders |
+| Administration | Catalog writes, stock management under `/api/v1/inventory`, and `PATCH /api/v1/orders/{id}/status` | `ADMIN` |
+
+### Try an order retry in Swagger
+
+Sign in through `POST /auth/login` and enter the JWT under **Authorize**. Open `POST /api/v1/orders` and select **Try it out**. Set `Idempotency-Key` to a fresh value such as `swagger-order-test-01`, and replace `productId` with the ID of a product that has stock.
+
+```json
+{
+  "items": [
+    { "productId": 1, "quantity": 1 }
+  ]
+}
+```
+
+| Request | Expected response |
+|---|---|
+| Create the order with the fresh key | `201 Created` with a new `PENDING` order. Note its `id`. |
+| Repeat the same body and key | `200 OK` with the original order ID. |
+| Change the quantity to `2` and reuse the key | `409 Conflict`. |
+
+Use `GET /api/v1/orders/{id}` to check the current status of the order returned by either successful request. [Order controller](src/main/java/com/aashir/ecommerce/controller/OrderController.java) · [Retry behavior](#retry-order-creation)
+
+### MySQL tables
+
+The local schema defaults to `ecommercespring_db`. Each order belongs to a customer and contains one or more line items. An order line saves its unit price and subtotal at order creation, so later catalog price changes leave the stored order total intact. [Entity mappings](src/main/java/com/aashir/ecommerce/entity)
+
+| Area | Tables | What they store |
+|---|---|---|
+| Accounts | `users`, `address`, `password_reset_otp` | Customer accounts and roles, saved addresses, and password reset hashes and expiry times |
+| Catalog and stock | `products`, `product_details`, `inventories` | Catalog prices, product specifications, and stock quantities keyed by product |
+| Orders | `orders`, `order_items`, `order_idempotency` | Orders, line quantities and prices, and the request keys and fingerprints used for order retries |
+| Event delivery | `outbox_events` | Outgoing order events and the timestamp recorded after successful publication |
+| Payment reconciliation | `processed_events`, `late_payment_reviews` | Processed payment event IDs and captures recorded for review after order cancellation |
