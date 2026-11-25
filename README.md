@@ -155,3 +155,34 @@ Registration, password reset, and payment-driven order changes raise Spring noti
 | `ORDER_CANCELLED` | A payment failure cancels a pending order. |
 
 The notification service consumes these messages and handles email delivery. [Spring listener](src/main/java/com/aashir/ecommerce/service/NotificationEventListener.java) · [Async publisher](src/main/java/com/aashir/ecommerce/service/NotificationPublisher.java)
+
+## Reliability
+
+### Recover order events after a Kafka outage
+
+The order and its outbox entry commit together in MySQL. If a Kafka send fails, the scheduled publisher can pick up the row on a later run. The publisher saves `processedAt` at the end of a completed batch. If a later send interrupts that batch, earlier acknowledged records can be sent again with their original `eventId`. The payment service checks processed event IDs and uses `ORDER-{orderId}` as the idempotency key when creating the payment. [Outbox publisher](src/main/java/com/aashir/ecommerce/service/OutboxPublisher.java#L29) · [Payment event handling](https://github.com/Aashirshaikh07/payment-service/blob/main/src/main/java/com/aashir/payment/service/PaymentService.java#L82)
+
+### Apply payment outcomes safely
+
+Success and failure arrive on separate Kafka topics. The consumer locks the order row before checking `processed_events` or reading late-capture records. It returns early for a recorded event ID. For a new event, it commits the processed marker together with the order, stock, or review changes made by that event.
+
+| Event processed first | What happens |
+|---|---|
+| `payment-succeeded` | The consumer confirms the pending order. The state guard skips a later failure. |
+| `payment-failed` | The consumer cancels the pending order and restores stock. If a capture arrives later, the consumer records it for review on the cancelled order. |
+
+The `late_payment_reviews` table enforces one review per order and payment, even if the same capture arrives with a different event ID. [Payment consumer](src/main/java/com/aashir/ecommerce/kafka/PaymentKafkaConsumer.java) · [Order row lock](src/main/java/com/aashir/ecommerce/repository/OrderRepository.java#L21) · [Late payment review](src/main/java/com/aashir/ecommerce/entity/LatePaymentReview.java)
+
+### Retry failed payment events
+
+Both payment listeners use the same Spring Kafka error handler. An unprocessed event that references a missing order raises an error for the handler. Both listener factories also use `ErrorHandlingDeserializer` so decoding failures reach the same error handling path.
+
+Retryable failures get up to **three retries**, two seconds apart. After retries are exhausted, the handler routes the record to `payment-succeeded.DLT` or `payment-failed.DLT` using the original partition number. [Payment listener configuration](src/main/java/com/aashir/ecommerce/config/KafkaConsumerConfig.java) · [Kafka error handler](src/main/java/com/aashir/ecommerce/config/KafkaErrorHandlerConfig.java)
+
+The order transaction has already committed when the notification publisher sends the email request. If that send fails, this backend logs the error with the event ID. The notification service handles delivery retries after the message reaches Kafka. [Notification publisher](src/main/java/com/aashir/ecommerce/service/NotificationPublisher.java)
+
+### Verify the failure paths
+
+The MySQL integration tests cover competing payment outcomes and failed database writes. A failed review insert leaves the event eligible for retry. A failed processed-marker insert rolls back the review so a retry can save both together.
+
+The cross-service tests send both event sequences through Kafka with simulated Razorpay responses, then verify order status, stock, review records, and notifications after replay. [Consumer integration tests](src/test/java/com/aashir/ecommerce/kafka/PaymentKafkaConsumerIntegrationTest.java) · [Kafka handoff tests](src/test/handoff/com/aashir/ecommerce/kafka/PaymentKafkaHandoffTest.java)
