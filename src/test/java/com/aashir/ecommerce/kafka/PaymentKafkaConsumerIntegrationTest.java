@@ -1,5 +1,7 @@
 package com.aashir.ecommerce.kafka;
 
+import com.aashir.ecommerce.dto.CreateOrderRequest;
+import com.aashir.ecommerce.dto.OrderItemRequest;
 import com.aashir.ecommerce.entity.Inventory;
 import com.aashir.ecommerce.entity.Order;
 import com.aashir.ecommerce.entity.OrderItem;
@@ -15,6 +17,7 @@ import com.aashir.ecommerce.repository.OrderRepository;
 import com.aashir.ecommerce.repository.ProcessedEventRepository;
 import com.aashir.ecommerce.repository.ProductRepository;
 import com.aashir.ecommerce.repository.UserRepository;
+import com.aashir.ecommerce.security.CustomUserDetails;
 import com.aashir.ecommerce.service.InventoryService;
 import com.aashir.ecommerce.service.NotificationEventFactory;
 import com.aashir.ecommerce.service.OrderCreationTransactionService;
@@ -34,6 +37,8 @@ import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -46,6 +51,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -58,9 +64,9 @@ import static org.mockito.Mockito.*;
 @DataJpaTest(showSql = false, properties = "spring.jpa.hibernate.ddl-auto=create-only")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({PaymentKafkaConsumer.class, OrderService.class, InventoryService.class,
-        NotificationEventFactory.class, SimpleMeterRegistry.class})
-@MockitoBean(types = {OrderKafkaProducer.class, OutboxService.class, OrderRequestFingerprint.class,
-        OrderCreationTransactionService.class, OrderIdempotencyRecoveryService.class})
+        NotificationEventFactory.class, SimpleMeterRegistry.class, OrderCreationTransactionService.class,
+        OrderRequestFingerprint.class})
+@MockitoBean(types = {OrderKafkaProducer.class, OutboxService.class, OrderIdempotencyRecoveryService.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Testcontainers
 class PaymentKafkaConsumerIntegrationTest {
@@ -95,6 +101,10 @@ class PaymentKafkaConsumerIntegrationTest {
     private ProductRepository products;
     @Autowired
     private InventoryRepository inventories;
+    @Autowired
+    private OrderService orderService;
+    @Autowired
+    private SimpleMeterRegistry meterRegistry;
     @MockitoSpyBean
     private NotificationEventFactory notifications;
     @MockitoBean
@@ -104,6 +114,69 @@ class PaymentKafkaConsumerIntegrationTest {
     void clearEventTables() {
         reviews.deleteAllInBatch();
         processedEvents.deleteAllInBatch();
+    }
+
+    @Test
+    void countsCommittedOrderCreationOnceAcrossRollbackAndIdempotentReplay() {
+        Product product = productWithStock(4);
+        OrderItemRequest item = new OrderItemRequest();
+        item.setProductId(product.getId());
+        item.setQuantity(1);
+        CreateOrderRequest request = new CreateOrderRequest();
+        request.setItems(List.of(item));
+        String key = UUID.randomUUID().toString();
+        var created = meterRegistry.counter("orders.created");
+        double countBefore = created.count();
+
+        CustomUserDetails principal = new CustomUserDetails(saveCustomer());
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities()));
+        try {
+            var rolledBack = transactionTemplate.execute(status -> {
+                var result = orderService.createOrder(request, key);
+                assertEquals(countBefore, created.count());
+                status.setRollbackOnly();
+                return result;
+            });
+            assertFalse(orders.existsById(rolledBack.response().getId()));
+            assertEquals(countBefore, created.count());
+
+            var committed = orderService.createOrder(request, key);
+            assertFalse(committed.replay());
+            assertEquals(countBefore + 1, created.count());
+
+            var replay = orderService.createOrder(request, key);
+            assertTrue(replay.replay());
+            assertEquals(committed.response().getId(), replay.response().getId());
+            assertEquals(countBefore + 1, created.count());
+            assertEquals(3, inventories.findByProductId(product.getId()).orElseThrow().getQuantity());
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void countsCommittedPaymentCancellationOnceAcrossRollbackAndReplay() {
+        Long orderId = orders.save(newOrder(OrderStatus.PENDING)).getId();
+        var event = new PaymentFailedEvent(UUID.randomUUID(), 10L, orderId, "Payment expired");
+        var cancelled = meterRegistry.counter("orders.cancelled");
+        double countBefore = cancelled.count();
+
+        transactionTemplate.executeWithoutResult(status -> {
+            consumer.handlePaymentFailed(event);
+            assertEquals(countBefore, cancelled.count());
+            status.setRollbackOnly();
+        });
+        assertEquals(OrderStatus.PENDING, orders.findById(orderId).orElseThrow().getStatus());
+        assertFalse(processedEvents.existsById(event.eventId()));
+        assertEquals(countBefore, cancelled.count());
+
+        consumer.handlePaymentFailed(event);
+        assertEquals(OrderStatus.CANCELLED, orders.findById(orderId).orElseThrow().getStatus());
+        assertEquals(countBefore + 1, cancelled.count());
+
+        consumer.handlePaymentFailed(event);
+        assertEquals(countBefore + 1, cancelled.count());
     }
 
     @Test
@@ -135,16 +208,7 @@ class PaymentKafkaConsumerIntegrationTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void overlappingCaptureAndExpiryHaveOnlyOneOrderOutcome(boolean captureFirst) throws Exception {
-        Product product = new Product();
-        product.setProductName("Test product");
-        product.setCategory("Test");
-        product.setPrice(CAPTURED_AMOUNT);
-        Product savedProduct = products.save(product);
-        Inventory inventory = new Inventory();
-        inventory.setProduct(savedProduct);
-        inventory.setQuantity(4);
-        inventories.save(inventory);
-
+        Product savedProduct = productWithStock(4);
         Order order = newOrder(OrderStatus.PENDING);
         OrderItem item = new OrderItem();
         item.setOrder(order);
@@ -267,6 +331,15 @@ class PaymentKafkaConsumerIntegrationTest {
     }
 
     private Order newOrder(OrderStatus status) {
+        Order order = new Order();
+        order.setUser(saveCustomer());
+        order.setOrderNumber(UUID.randomUUID().toString());
+        order.setTotalAmount(CAPTURED_AMOUNT);
+        order.setStatus(status);
+        return order;
+    }
+
+    private User saveCustomer() {
         String reference = UUID.randomUUID().toString();
         User user = new User();
         user.setName("Test Customer");
@@ -275,13 +348,21 @@ class PaymentKafkaConsumerIntegrationTest {
         user.setPassword("unused");
         user.setRole("USER");
         user.setStatus(UserStatus.ACTIVE);
+        return users.save(user);
+    }
 
-        Order order = new Order();
-        order.setUser(users.save(user));
-        order.setOrderNumber(reference);
-        order.setTotalAmount(CAPTURED_AMOUNT);
-        order.setStatus(status);
-        return order;
+    private Product productWithStock(int quantity) {
+        Product product = new Product();
+        product.setProductName("Test product");
+        product.setCategory("Test");
+        product.setPrice(CAPTURED_AMOUNT);
+        Product savedProduct = products.save(product);
+
+        Inventory inventory = new Inventory();
+        inventory.setProduct(savedProduct);
+        inventory.setQuantity(quantity);
+        inventories.save(inventory);
+        return savedProduct;
     }
 
     private void assertReviewRecorded(PaymentSucceededEvent event) {

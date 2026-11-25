@@ -24,6 +24,8 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
+import static com.aashir.ecommerce.config.TransactionCallbacks.afterCommit;
+
 @Service
 public class OrderCreationTransactionService {
     private static final Logger log =
@@ -148,11 +150,13 @@ public class OrderCreationTransactionService {
                 "order-events",
                 kafkaEvent
         );
-
-
-        meterRegistry.counter("orders.created").increment();
-
-        log.info("Order created successfully: orderId={}", order.getId());
+        afterCommit(() -> {
+            meterRegistry.counter("orders.created").increment();
+            log.atInfo()
+                    .addKeyValue("orderId", kafkaEvent.orderId())
+                    .addKeyValue("eventId", kafkaEvent.eventId())
+                    .log("Order created");
+        });
 
         return mapToResponse(savedOrder);
     }
