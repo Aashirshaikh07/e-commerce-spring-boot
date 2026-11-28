@@ -269,3 +269,46 @@ The creation and outbox logs share an `eventId`. The payment outcome carries its
 | Update or restore stock | [InventoryService](src/main/java/com/aashir/ecommerce/service/InventoryService.java) · [Stock restoration](src/main/java/com/aashir/ecommerce/service/OrderService.java#L285) |
 | Publish outbox events | [OutboxPublisher](src/main/java/com/aashir/ecommerce/service/OutboxPublisher.java) |
 | Apply payment outcomes | [PaymentKafkaConsumer](src/main/java/com/aashir/ecommerce/kafka/PaymentKafkaConsumer.java) |
+
+## Running Locally and Testing
+
+### Start the backend
+
+Use Java 21, MySQL 8, and Docker with Compose. The Maven Wrapper supplies the project’s Maven version. The commands below use Windows PowerShell and assume `payment-service` is checked out beside this repository. [Maven Wrapper configuration](.mvn/wrapper/maven-wrapper.properties)
+
+Start MySQL on `localhost:3306` and create the development database in your MySQL client. Hibernate manages the tables when the backend starts.
+
+```sql
+CREATE DATABASE IF NOT EXISTS ecommercespring_db;
+```
+
+Create a `.env` file in the repository root. Set `DB_PASSWORD` to your local MySQL password. The default MySQL username is `root`. Use the same `SERVICE_SECRET` value in this backend and the payment service for internal requests. [Application configuration](src/main/resources/application.properties)
+
+```properties
+DB_PASSWORD=your-local-mysql-password
+SERVICE_SECRET=your-shared-local-service-secret
+```
+
+From the repository root, start Kafka on `localhost:9092` and run the backend. [Kafka Compose file](https://github.com/Aashirshaikh07/payment-service/blob/main/docker-compose.yml)
+
+```powershell
+docker compose -f ../payment-service/docker-compose.yml up -d kafka
+.\mvnw.cmd spring-boot:run
+```
+
+The backend listens on `8080`. Open Swagger UI to try the catalog, accounts, and order endpoints. For a full checkout, start the payment service on `8083`, then use the storefront with Razorpay Test Mode. [Local Swagger UI](http://localhost:8080/swagger-ui.html) · [Payment service setup](https://github.com/Aashirshaikh07/payment-service#running-locally)
+
+### Run the tests
+
+```powershell
+# Unit tests
+.\mvnw.cmd '-Dtest=*Test,!PaymentKafkaConsumerIntegrationTest' test
+
+# MySQL reconciliation tests
+.\mvnw.cmd '-Dtest=PaymentKafkaConsumerIntegrationTest' test
+
+# Cross-service payment handoff
+.\mvnw.cmd -Ppayment-handoff '-Dtest=PaymentKafkaHandoffTest' test
+```
+
+The MySQL suite starts its own database with Testcontainers and checks duplicate events, competing payment outcomes, and rollbacks. The handoff suite also starts embedded Kafka and uses the sibling payment service source to exercise expiry and late capture with simulated Razorpay responses. [MySQL integration tests](src/test/java/com/aashir/ecommerce/kafka/PaymentKafkaConsumerIntegrationTest.java) · [Cross-service handoff tests](src/test/handoff/com/aashir/ecommerce/kafka/PaymentKafkaHandoffTest.java)
