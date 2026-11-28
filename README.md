@@ -233,3 +233,39 @@ The local schema defaults to `ecommercespring_db`. Each order belongs to a custo
 | Orders | `orders`, `order_items`, `order_idempotency` | Orders, line quantities and prices, and the request keys and fingerprints used for order retries |
 | Event delivery | `outbox_events` | Outgoing order events and the timestamp recorded after successful publication |
 | Payment reconciliation | `processed_events`, `late_payment_reviews` | Processed payment event IDs and captures recorded for review after order cancellation |
+
+## Observability and Code Map
+
+### Health and metrics
+
+Spring Boot Actuator runs on the same port as the API. [Actuator configuration](src/main/resources/application.properties#L14)
+
+| Endpoint | What it shows |
+|---|---|
+| `/actuator/health` | Service status and details for enabled health checks |
+| `/actuator/info` | Application metadata when configured |
+| `/actuator/metrics` | Registered Micrometer metrics |
+| `/actuator/prometheus` | Metrics in Prometheus scrape format |
+
+`orders.created` and `orders.cancelled` increment after the corresponding database transaction commits. The MySQL integration tests verify one increment on commit and zero additional increments on rollback or replay. [Integration tests](src/test/java/com/aashir/ecommerce/kafka/PaymentKafkaConsumerIntegrationTest.java#L120)
+
+### Follow an order through the logs
+
+The backend writes JSON logs to the console and `logs/ecommerce.log`. Use the `X-Request-Id` response header to find an HTTP request’s method, path, status, and duration. Use `orderId` to follow its checkout through the outbox and Kafka. [Request logging filter](src/main/java/com/aashir/ecommerce/config/RequestLoggingFilter.java) · [Logback configuration](src/main/resources/logback-spring.xml)
+
+| Log message | What it confirms |
+|---|---|
+| `Order created` | The order, stock deduction, and outbox entry committed |
+| `Kafka acknowledged order outbox event` | Kafka acknowledged the order-created message on `order-events` |
+| `Payment success confirmed order` | The consumer committed the order as `CONFIRMED` after processing `payment-succeeded` |
+
+The creation and outbox logs share an `eventId`. The payment outcome carries its own `eventId` and `paymentId`, with the same `orderId` linking it to checkout. A capture after cancellation appears as `Late payment capture recorded for review`.
+
+### Code map
+
+| Task | Start here |
+|---|---|
+| Place or retry an order | [OrderService](src/main/java/com/aashir/ecommerce/service/OrderService.java#L62) · [OrderCreationTransactionService](src/main/java/com/aashir/ecommerce/service/OrderCreationTransactionService.java) |
+| Update or restore stock | [InventoryService](src/main/java/com/aashir/ecommerce/service/InventoryService.java) · [Stock restoration](src/main/java/com/aashir/ecommerce/service/OrderService.java#L285) |
+| Publish outbox events | [OutboxPublisher](src/main/java/com/aashir/ecommerce/service/OutboxPublisher.java) |
+| Apply payment outcomes | [PaymentKafkaConsumer](src/main/java/com/aashir/ecommerce/kafka/PaymentKafkaConsumer.java) |
