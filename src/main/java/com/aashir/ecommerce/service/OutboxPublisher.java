@@ -4,6 +4,7 @@ import com.aashir.ecommerce.entity.OutboxEvent;
 import com.aashir.ecommerce.event.OrderCreatedKafkaEvent;
 import com.aashir.ecommerce.repository.OutboxEventRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
+@Slf4j
 public class OutboxPublisher {
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
@@ -31,6 +33,7 @@ public class OutboxPublisher {
         var events = outboxEventRepository.findByProcessedAtIsNull();
         List<OutboxEvent> successfullyPublished = new ArrayList<>();
         for(OutboxEvent outboxEvent : events) {
+            Long orderId = null;
             try {
                 if(outboxEvent.getEventType().equals("OrderCreatedKafkaEvent")) {
 
@@ -38,6 +41,7 @@ public class OutboxPublisher {
                             outboxEvent.getPayload(),
                             OrderCreatedKafkaEvent.class
                     );
+                    orderId = event.orderId();
 
                     kafkaTemplate.send(
                             outboxEvent.getTopic(),
@@ -45,11 +49,21 @@ public class OutboxPublisher {
                             event
                     ) .get();
 
+                    log.atInfo()
+                            .addKeyValue("orderId", orderId)
+                            .addKeyValue("eventId", outboxEvent.getId())
+                            .addKeyValue("topic", outboxEvent.getTopic())
+                            .log("Kafka acknowledged order outbox event");
                     outboxEvent.setProcessedAt(java.time.LocalDateTime.now());
                     successfullyPublished.add(outboxEvent);
 
                 }
             }catch (Exception e){
+                log.atWarn()
+                        .addKeyValue("orderId", orderId)
+                        .addKeyValue("eventId", outboxEvent.getId())
+                        .addKeyValue("topic", outboxEvent.getTopic())
+                        .log("Order outbox publication failed");
                 throw new RuntimeException(
                         "Failed to publish event to outbox events: " + outboxEvent.getId(),
                         e

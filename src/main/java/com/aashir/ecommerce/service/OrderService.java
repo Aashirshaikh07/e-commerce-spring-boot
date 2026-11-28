@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DataIntegrityViolationException;
 import java.util.List;
 
+import static com.aashir.ecommerce.config.TransactionCallbacks.afterCommit;
 
 @Service
 public class OrderService {
@@ -82,10 +83,9 @@ public class OrderService {
                         "Idempotency record exists without an associated order"
                 );
             }
-                log.info(
-                        "Returning existing order for idempotency key, orderId={}",
-                        record.getOrder().getId()
-                );
+            log.atInfo()
+                    .addKeyValue("orderId", record.getOrder().getId())
+                    .log("Returning existing order for idempotency key");
             return new OrderCreationResult(
                     mapToResponse(record.getOrder()),
                     true
@@ -117,8 +117,9 @@ public class OrderService {
             if (record.getOrder() == null) {
                 throw ex;
             }
-            log.info("Recovered concurrent order request, orderId={}",
-                    record.getOrder().getId());
+            log.atInfo()
+                    .addKeyValue("orderId", record.getOrder().getId())
+                    .log("Recovered concurrent order request");
 
             return new OrderCreationResult(
                     mapToResponse(record.getOrder()),
@@ -219,29 +220,33 @@ public class OrderService {
         Order order = orderRepository.findByIdForUpdate(order_id)
                 .orElseThrow(()-> new OrderNotFountException(order_id));
 
-        log.info("Updating orderStatus with orderId ={}",order.getId());
-
         OrderStatus currentStatus = order.getStatus();
         if (!currentStatus.canTransitionTo(requestedStatus)) {
-            log.info("Order Status Transition can't be updated with wrong wrong steps");
+            log.atWarn()
+                    .addKeyValue("orderId", order.getId())
+                    .addKeyValue("orderStatus", currentStatus)
+                    .addKeyValue("requestedStatus", requestedStatus)
+                    .log("Rejected invalid order status transition");
             throw new InvalidOrderStatusTransitionException(
                     currentStatus,
                     requestedStatus
             );
         }
         order.setStatus(requestedStatus);
-        OrderStatus orderStatus =order.getStatus();
         if (requestedStatus == OrderStatus.CANCELLED) {
             restoreInventory(order);
-            log.info("cancelled orderId ={}",order.getId());
-            meterRegistry.counter("orders.cancelled").increment();
         }
 
         orderRepository.save(order);
 
-       if (requestedStatus == OrderStatus.CANCELLED) {
-           publishOrderCancelledEvent(order);
-       }
+        if (requestedStatus == OrderStatus.CANCELLED) {
+            publishOrderCancelledEvent(order);
+            Long orderId = order.getId();
+            afterCommit(() -> {
+                meterRegistry.counter("orders.cancelled").increment();
+                log.atInfo().addKeyValue("orderId", orderId).log("Order cancelled");
+            });
+        }
         return mapToUpdatedOrderResponse(order);
     }
 
@@ -278,15 +283,19 @@ public class OrderService {
     }
 
     private void restoreInventory(Order order){
-        List<OrderItem> orderItems = orderItemRepository.findByOrderId(order.getId());
+        Long orderId = order.getId();
+        List<OrderItem> orderItems = orderItemRepository.findByOrderId(orderId);
 
         for (OrderItem orderItem : orderItems) {
             Long productId = orderItem.getProduct().getId();
             Integer quantity = orderItem.getQuantity();
 
             inventoryService.addStock(productId, new UpdateStockRequest(quantity));
-            log.info("Restore inventory successfully with inventoryProductName={} and productCount",orderItem.getProduct().getProductName(),orderItem.getQuantity());
-
+            afterCommit(() -> log.atInfo()
+                    .addKeyValue("orderId", orderId)
+                    .addKeyValue("productId", productId)
+                    .addKeyValue("quantity", quantity)
+                    .log("Restored stock for cancelled order"));
         }
     }
 
@@ -301,21 +310,18 @@ public class OrderService {
         order.setStatus(OrderStatus.CONFIRMED);
         orderRepository.save(order);
         eventPublisher.publishEvent(notificationEventFactory.orderConfirmed(order));
-        log.info("Payment succeeded for orderId ={}",order.getId());
         chain.info("1 SERVICE spring event published, orderId={}", order.getId());
     }
 
-  @Transactional
-    public void cancelOrder(Order order,String reason){
+    @Transactional
+    public void cancelOrder(Order order, String reason) {
+        log.atInfo()
+                .addKeyValue("orderId", order.getId())
+                .addKeyValue("reason", reason)
+                .log("Cancelling order");
 
-      log.info(
-              "Cancelling orderId={} because {}",
-              order.getId(),
-              reason
-      );
-
-      updateOrderStatus(order.getId(), OrderStatus.CANCELLED);
-      eventPublisher.publishEvent(notificationEventFactory.orderCancelled(order));
-  }
+        updateOrderStatus(order.getId(), OrderStatus.CANCELLED);
+        eventPublisher.publishEvent(notificationEventFactory.orderCancelled(order));
+    }
 
 }

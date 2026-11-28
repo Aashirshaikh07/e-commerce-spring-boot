@@ -20,18 +20,22 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.aashir.ecommerce.config.TransactionCallbacks.afterCommit;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class PaymentKafkaConsumer {
+    private static final String PAYMENT_SUCCEEDED_TOPIC = "payment-succeeded";
+    private static final String PAYMENT_FAILED_TOPIC = "payment-failed";
+
     private final OrderService orderService;
     private final OrderRepository orderRepository;
     private final ProcessedEventRepository processedEventRepository;
     private final LatePaymentReviewRepository latePaymentReviewRepository;
 
     @KafkaListener(
-            topics = "payment-succeeded",
+            topics = PAYMENT_SUCCEEDED_TOPIC,
             groupId = "ecommerce-payment-group",
             containerFactory = "paymentSucceededKafkaListenerContainerFactory"
     )
@@ -50,28 +54,41 @@ public class PaymentKafkaConsumer {
                 latePaymentReviewRepository.save(new LatePaymentReview(
                         eventId, order.getId(), event.paymentId(), event.amount()
                 ));
+                afterCommit(() -> log.atWarn()
+                        .addKeyValue("orderId", event.orderId())
+                        .addKeyValue("eventId", eventId)
+                        .addKeyValue("paymentId", event.paymentId())
+                        .addKeyValue("topic", PAYMENT_SUCCEEDED_TOPIC)
+                        .log("Late payment capture recorded for review"));
             }
             markProcessed(eventId);
             return;
         }
 
         if (!order.getStatus().canTransitionTo(OrderStatus.CONFIRMED)) {
-            log.error(
-                    "Payment succeeded for orderId={} but the order is {}. Needs manual review or refund. eventId={}",
-                    order.getId(),
-                    order.getStatus(),
-                    eventId
-            );
+            log.atError()
+                    .addKeyValue("orderId", event.orderId())
+                    .addKeyValue("eventId", eventId)
+                    .addKeyValue("paymentId", event.paymentId())
+                    .addKeyValue("topic", PAYMENT_SUCCEEDED_TOPIC)
+                    .addKeyValue("orderStatus", order.getStatus())
+                    .log("Payment capture requires review because the order cannot be confirmed");
             markProcessed(eventId);
             return;
         }
         orderService.markPaymentSuccessful(order);
 
         markProcessed(eventId);
+        afterCommit(() -> log.atInfo()
+                .addKeyValue("orderId", event.orderId())
+                .addKeyValue("eventId", eventId)
+                .addKeyValue("paymentId", event.paymentId())
+                .addKeyValue("topic", PAYMENT_SUCCEEDED_TOPIC)
+                .log("Payment success confirmed order"));
     }
 
     @KafkaListener(
-            topics = "payment-failed",
+            topics = PAYMENT_FAILED_TOPIC,
             groupId = "ecommerce-payment-group",
             containerFactory = "paymentFailedKafkaListenerContainerFactory"
     )
@@ -85,14 +102,14 @@ public class PaymentKafkaConsumer {
         }
         Order order = pendingEventOrder.get();
 
-        log.info("payment-failed received eventId={} orderId={} statusBefore={}", eventId, order.getId(), order.getStatus());
         if (!order.getStatus().canTransitionTo(OrderStatus.CANCELLED)) {
-            log.warn(
-                    "Ignoring payment-failed event {} because orderId={} is already {}",
-                    eventId,
-                    order.getId(),
-                    order.getStatus()
-            );
+            log.atWarn()
+                    .addKeyValue("orderId", event.orderId())
+                    .addKeyValue("eventId", eventId)
+                    .addKeyValue("paymentId", event.paymentId())
+                    .addKeyValue("topic", PAYMENT_FAILED_TOPIC)
+                    .addKeyValue("orderStatus", order.getStatus())
+                    .log("Skipped payment failure for current order status");
             markProcessed(eventId);
             return;
         }
@@ -102,16 +119,26 @@ public class PaymentKafkaConsumer {
         );
 
         markProcessed(eventId);
+        afterCommit(() -> log.atInfo()
+                .addKeyValue("orderId", event.orderId())
+                .addKeyValue("eventId", eventId)
+                .addKeyValue("paymentId", event.paymentId())
+                .addKeyValue("topic", PAYMENT_FAILED_TOPIC)
+                .log("Payment failure cancelled order"));
     }
 
     private Optional<Order> findOrderForUnprocessedEvent(UUID eventId, Long orderId) {
         // Acquire the order lock before the first snapshot read of the event/review tables.
         Optional<Order> order = orderRepository.findByIdForUpdate(orderId);
         if (processedEventRepository.existsById(eventId)) {
+            log.atDebug()
+                    .addKeyValue("orderId", orderId)
+                    .addKeyValue("eventId", eventId)
+                    .log("Payment event already processed");
             return Optional.empty();
         }
         if (order.isEmpty()) {
-            throw new IllegalStateException("Order not found");
+            throw new IllegalStateException("Order " + orderId + " not found for payment event " + eventId);
         }
         return order;
     }
